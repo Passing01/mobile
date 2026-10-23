@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/config/env_config.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/theme/app_theme.dart';
 
@@ -29,6 +30,7 @@ class QvGestionApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: AppErrorReporter.messengerKey,
       title: AppConstants.appName,
       debugShowCheckedModeBanner: EnvConfig.isDev,
       theme: AppTheme.lightTheme,

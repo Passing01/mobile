@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:qvgestion_mobile/core/config/app_config.dart';
 
 enum AppEnvironment {
   dev,
@@ -24,8 +25,8 @@ class EnvConfig {
   }) async {
     try {
       await dotenv.load(fileName: '.env');
-    } catch (_) {
-      // Ignorer si le fichier .env est absent (ex: tests automatisés)
+    } catch (e) {
+      debugPrint('ℹ️ Fichier .env non chargé ou absent: $e');
     }
     initialize(environment: environment, customBaseUrl: customBaseUrl);
   }
@@ -83,6 +84,20 @@ class EnvConfig {
 
   /// URL de base HTTP de l'API Backend QvGestion
   static String get apiBaseUrl {
+    if (AppConfig.testMode) {
+      if (AppConfig.testApiUrl.isNotEmpty) {
+        return AppConfig.testApiUrl;
+      }
+      final testEnv = dotenv.isInitialized ? dotenv.maybeGet('TEST_API_BASE_URL') : null;
+      if (testEnv != null && testEnv.isNotEmpty) {
+        return testEnv;
+      }
+      final host = (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+          ? '10.0.2.2:8001'
+          : '127.0.0.1:8001';
+      return 'http://$host/api/v1';
+    }
+
     if (_customBaseUrl != null && _customBaseUrl!.isNotEmpty) {
       return _customBaseUrl!;
     }

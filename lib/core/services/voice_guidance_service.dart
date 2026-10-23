@@ -38,7 +38,9 @@ class VoiceGuidanceService {
   Future<void> stop() async {
     try {
       await _flutterTts.stop();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.d('Arrêt TTS ignoré: $e');
+    }
   }
 }
 

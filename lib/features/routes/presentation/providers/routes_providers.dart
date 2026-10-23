@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 import 'package:qvgestion_mobile/features/routes/data/repositories/routes_repository.dart';
@@ -52,8 +55,19 @@ class ActiveRouteNotifier extends Notifier<AsyncValue<RouteModel?>> {
         mode: mode,
       );
       state = AsyncValue.data(route);
+      DebugInfo.instance.setRoute(
+        points: route.geometry.length,
+        distanceM: route.distanceMeters,
+        durationS: route.durationSeconds.toDouble(),
+      );
       return route;
     } catch (e, st) {
+      AppErrorReporter.reportError(
+        'Erreur lors du calcul d\'itinéraire',
+        error: e,
+        stackTrace: st,
+        tag: 'RoutingAPI',
+      );
       state = AsyncValue.error(e, st);
       return null;
     }
@@ -61,6 +75,7 @@ class ActiveRouteNotifier extends Notifier<AsyncValue<RouteModel?>> {
 
   void clear() {
     state = const AsyncValue.data(null);
+    DebugInfo.instance.clearRoute();
   }
 }
 
@@ -99,8 +114,8 @@ final multiModeRoutesProvider =
         destination: destination,
         mode: selectedMode,
       );
-    } catch (_) {
-      // Le repository utilise déjà un fallback géodésique hors-ligne
+    } catch (e) {
+      AppLogger.w('Échec calcul itinéraire mode primaire ($selectedMode): $e');
     }
   }
 

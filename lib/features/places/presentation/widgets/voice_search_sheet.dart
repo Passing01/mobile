@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:latlong2/latlong.dart';
+import 'package:qvgestion_mobile/core/config/app_config.dart';
+import 'package:qvgestion_mobile/core/debug/debug_info.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 
@@ -176,11 +181,12 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
           setState(() {
             _isListening = false;
             _statusMessage =
-                'Sélectionnez ou prononcez un des lieux ci-dessous :';
+                'Sélectionnez un lieu ou prononcez votre destination :';
           });
         }
       }
-    } catch (_) {
+    } catch (e) {
+      AppLogger.w('Erreur d\'écoute vocale: $e');
       if (mounted) {
         setState(() {
           _isListening = false;
@@ -194,7 +200,9 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
   Future<void> _stopListening() async {
     try {
       await _speech.stop();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.w('Erreur arrêt de l\'écoute vocale: $e');
+    }
     if (mounted) {
       setState(() => _isListening = false);
     }
@@ -206,21 +214,23 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
   void _processSpokenText(String text) {
     final query = text.toLowerCase().trim();
 
-    // 1. Chercher dans le catalogue des lieux burkinabè (pharmacies, stations, marchés, etc.)
-    for (final p in defaultOuagaIconicPlaces) {
-      final nomLower = p.nom.toLowerCase();
-      final quartierLower = (p.quartier ?? '').toLowerCase();
-      final catSlug = (p.categorie?.slug ?? '').toLowerCase();
+    // 1. Chercher dans le catalogue des lieux (uniquement en mode test)
+    if (AppConfig.testMode) {
+      for (final p in defaultOuagaIconicPlaces) {
+        final nomLower = p.nom.toLowerCase();
+        final quartierLower = (p.quartier ?? '').toLowerCase();
+        final catSlug = (p.categorie?.slug ?? '').toLowerCase();
 
-      if (query.contains(nomLower) ||
-          (nomLower.contains('pharmacie') && query.contains('pharmacie')) ||
-          (nomLower.contains('station') && query.contains('station')) ||
-          (catSlug.contains('pharmacie') && query.contains('pharmacie')) ||
-          (quartierLower.isNotEmpty && query.contains(quartierLower) && nomLower.contains('pharmacie'))) {
-        _selectPlace(
-          place: p,
-        );
-        return;
+        if (query.contains(nomLower) ||
+            (nomLower.contains('pharmacie') && query.contains('pharmacie')) ||
+            (nomLower.contains('station') && query.contains('station')) ||
+            (catSlug.contains('pharmacie') && query.contains('pharmacie')) ||
+            (quartierLower.isNotEmpty && query.contains(quartierLower) && nomLower.contains('pharmacie'))) {
+          _selectPlace(
+            place: p,
+          );
+          return;
+        }
       }
     }
 
@@ -239,13 +249,20 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
       }
     }
 
-    // 3. Si non trouvé exactement, créer un POI avec le texte prononcé
-    _selectPlace(
-      name: text,
-      lat: 12.3685,
-      lon: -1.5222,
-      quartier: 'Ouagadougou',
-    );
+    // 3. Si non trouvé : en mode test uniquement, créer une destination fictive de test
+    if (AppConfig.testMode) {
+      _selectPlace(
+        name: text,
+        lat: 12.3685,
+        lon: -1.5222,
+        quartier: 'Ouagadougou (Test)',
+      );
+    } else {
+      AppErrorReporter.reportError(
+        'Lieu non reconnu : "$text". Veuillez reformuler ou sélectionner un lieu sur la carte.',
+        tag: 'Recherche vocale',
+      );
+    }
   }
 
   Future<void> _selectPlace({
@@ -257,9 +274,18 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
   }) async {
     try {
       await _speech.stop();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.w('Erreur arrêt speech: $e');
+    }
 
     if (!mounted) return;
+
+    if (place == null && (lat == null || lon == null)) {
+      if (!AppConfig.testMode) {
+        AppErrorReporter.reportError('Coordonnées invalides pour ce lieu', tag: 'Recherche');
+        return;
+      }
+    }
 
     final resolvedPlace = place ??
         PlaceModel(
@@ -269,8 +295,12 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
           latitude: lat ?? 12.3685,
           longitude: lon ?? -1.5222,
           quartier: quartier ?? 'Ouagadougou',
-          distanceMeters: 1800.0,
         );
+
+    DebugInfo.instance.setDestination(
+      LatLng(resolvedPlace.latitude, resolvedPlace.longitude),
+      source: 'recherche',
+    );
     Navigator.of(context).pop(resolvedPlace);
   }
 

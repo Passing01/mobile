@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/network/api_exceptions.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/auth/data/repositories/auth_repository.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/providers/auth_state.dart';
 
@@ -137,7 +139,10 @@ class AuthNotifier extends Notifier<AuthState> {
         languePreferee: languePreferee,
       );
       state = state.copyWith(user: updated);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.w('Impossible de synchroniser la langue avec le serveur: $e');
+      AppErrorReporter.reportWarning('Impossible de synchroniser la préférence de langue', tag: 'Profil');
+    }
   }
 
   /// Déconnexion complète

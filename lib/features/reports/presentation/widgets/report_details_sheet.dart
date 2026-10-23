@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/network/api_exceptions.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/widgets/auth_modal_sheet.dart';
@@ -96,7 +97,8 @@ class _ReportDetailsSheetState extends ConsumerState<ReportDetailsSheet> {
           );
         }
       }
-    } catch (_) {
+    } catch (e) {
+      AppLogger.error('Erreur vote signalement: $e', tag: 'ReportSheet');
       if (mounted) {
         AppSnackbar.showError(
           context,

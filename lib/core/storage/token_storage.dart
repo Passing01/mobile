@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/storage/secure_storage_service.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 
 /// Gestionnaire sécurisé des jetons JWT (Access Token & Refresh Token)
 class TokenStorage {
@@ -65,7 +66,8 @@ class TokenStorage {
       final nowWithBuffer = DateTime.now().add(buffer);
 
       return expDate.isBefore(nowWithBuffer);
-    } catch (_) {
+    } catch (e) {
+      AppLogger.w('Format de token expiré ou corrompu: $e');
       return true;
     }
   }

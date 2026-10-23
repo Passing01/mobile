@@ -171,7 +171,9 @@ class AuthRepository implements IAuthRepository {
       if (raw != null && raw.isNotEmpty) {
         return UserModel.fromJson(jsonDecode(raw) as Map<String, dynamic>);
       }
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.w('Échec lecture cache utilisateur: $e');
+    }
     return null;
   }
 }

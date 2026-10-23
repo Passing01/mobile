@@ -3,7 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:qvgestion_mobile/core/config/app_config.dart';
+import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/core/widgets/loaders/app_shimmer.dart';
 import 'package:qvgestion_mobile/core/widgets/sheets/active_navigation_card.dart';
@@ -69,6 +72,14 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   }
 
   void _startNavigationSimulation(RouteModel route) {
+    if (!AppConfig.testMode) {
+      AppLogger.warning(
+        'Simulation de navigation ignorée car le mode test est désactivé (Mode réel actif)',
+        tag: 'Navigation',
+      );
+      return;
+    }
+
     _simulationTimer?.cancel();
     _simulationStep = 0;
     _isSimulationPaused = false;
@@ -105,6 +116,10 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         final currentPt = LatLng(next[0], next[1]);
         final heading = _calculateBearing(prev[0], prev[1], next[0], next[1]);
 
+        final lastPt = route.geometry.last;
+        final distToArrival = _calculateApproxDistance(next[0], next[1], lastPt[0], lastPt[1]);
+        DebugInfo.instance.updateArrivalDistance(distToArrival);
+
         if (mounted) {
           setState(() {
             _vehiclePosition = currentPt;
@@ -125,6 +140,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         }
       } else {
         timer.cancel();
+        DebugInfo.instance.updateArrivalDistance(0.0);
         final lang = ref.read(guidanceLanguageProvider);
         ref.read(voiceGuidanceServiceProvider).speak(
           'Vous êtes arrivé à destination ! Trajet complété.',
@@ -139,6 +155,12 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         }
       }
     });
+  }
+
+  double _calculateApproxDistance(double lat1, double lon1, double lat2, double lon2) {
+    final dLat = (lat2 - lat1) * 111000.0;
+    final dLon = (lon2 - lon1) * 111000.0 * math.cos(lat1 * math.pi / 180.0);
+    return math.sqrt(dLat * dLat + dLon * dLon);
   }
 
   double _calculateBearing(double lat1, double lon1, double lat2, double lon2) {
@@ -425,17 +447,18 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               ],
             ),
           ),
-          IconButton(
-            onPressed: () {
-              setState(() => _isSimulationPaused = !_isSimulationPaused);
-            },
-            icon: Icon(
-              _isSimulationPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-              color: Colors.white,
-              size: 26,
+          if (AppConfig.testMode)
+            IconButton(
+              onPressed: () {
+                setState(() => _isSimulationPaused = !_isSimulationPaused);
+              },
+              icon: Icon(
+                _isSimulationPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+              tooltip: _isSimulationPaused ? 'Reprendre' : 'Pause',
             ),
-            tooltip: _isSimulationPaused ? 'Reprendre' : 'Pause',
-          ),
           IconButton(
             onPressed: () {
               ref.read(voiceGuidanceServiceProvider).speak(

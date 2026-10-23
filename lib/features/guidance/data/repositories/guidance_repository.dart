@@ -1,4 +1,6 @@
+import 'package:qvgestion_mobile/core/config/app_config.dart';
 import 'package:qvgestion_mobile/core/config/env_config.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/network/api_client.dart';
 import 'package:qvgestion_mobile/core/network/api_endpoints.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
@@ -37,10 +39,12 @@ class GuidanceRepository {
       final landmarks = list
           .map((item) => LandmarkModel.fromJson(item as Map<String, dynamic>))
           .toList();
-      return landmarks.isNotEmpty ? landmarks : defaultOuagaLandmarks;
+      if (landmarks.isNotEmpty) return landmarks;
+      return AppConfig.testMode ? defaultOuagaLandmarks : const [];
     } catch (e) {
-      AppLogger.w('Repères distants inaccessibles ($e). Utilisation du catalogue local de Ouagadougou.');
-      return defaultOuagaLandmarks;
+      AppLogger.w('Repères distants inaccessibles ($e).');
+      AppErrorReporter.reportWarning('Repères distants inaccessibles: $e', tag: 'Guidance');
+      return AppConfig.testMode ? defaultOuagaLandmarks : const [];
     }
   }
 
@@ -56,7 +60,9 @@ class GuidanceRepository {
           .map((item) => AnchorModel.fromJson(item as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      AppLogger.w('Ancres de corridor inaccessibles ($e). Utilisation des repères locaux par défaut.');
+      AppLogger.w('Ancres de corridor inaccessibles ($e).');
+      AppErrorReporter.reportWarning('Ancres de corridor inaccessibles: $e', tag: 'Guidance');
+      if (!AppConfig.testMode) return const [];
       return defaultOuagaLandmarks.map((l) {
         return AnchorModel(
           kind: l.typeRepere == 'echangeur' ? 'interchange' : 'landmark',
@@ -92,7 +98,8 @@ class GuidanceRepository {
 
       return EnrichedRouteModel.fromJson(response.data as Map<String, dynamic>);
     } catch (e) {
-      AppLogger.w('Serveur de guidage indisponible ($e). Activation du Narrateur v2 local (Mooré/Dioula/Français).');
+      AppLogger.w('Serveur de guidage indisponible ($e). Activation du Narrateur v2 local.');
+      AppErrorReporter.reportWarning('Serveur de guidage indisponible ($e). Activation du guidage local.', tag: 'Guidance');
       return _buildOfflineEnrichedRoute(route, language);
     }
   }
@@ -102,8 +109,9 @@ class GuidanceRepository {
     final lang = language.toLowerCase();
     final enrichedList = <EnrichedManeuverModel>[];
 
-    // Conversion des landmarks par défaut en ancres pour le Narrateur v2
-    final defaultAnchors = defaultOuagaLandmarks.map((l) {
+    // Conversion des landmarks en ancres pour le Narrateur v2 (uniquement en testMode)
+    final fallbackLandmarks = AppConfig.testMode ? defaultOuagaLandmarks : const <LandmarkModel>[];
+    final defaultAnchors = fallbackLandmarks.map((l) {
       String kind = 'landmark';
       if (l.typeRepere == 'echangeur') kind = 'interchange';
       if (l.typeRepere == 'rond-point') kind = 'roundabout';

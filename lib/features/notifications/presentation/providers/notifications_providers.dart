@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/notifications/data/models/notification_item_model.dart';
 import 'package:qvgestion_mobile/features/notifications/data/repositories/notifications_repository.dart';
 
@@ -37,8 +39,9 @@ class MyNotificationsNotifier extends AsyncNotifier<List<NotificationItemModel>>
           return item;
         }).toList(),
       );
-    } catch (_) {
-      // Échec silencieux
+    } catch (e) {
+      AppLogger.w('Échec du marquage de la notification comme lue: $e');
+      AppErrorReporter.reportWarning('Impossible de marquer la notification comme lue', tag: 'Notifications');
     }
   }
 
@@ -47,10 +50,18 @@ class MyNotificationsNotifier extends AsyncNotifier<List<NotificationItemModel>>
     final unread = currentList.where((item) => !item.isRead).toList();
     final repo = ref.read(notificationsRepositoryProvider);
 
+    int failureCount = 0;
     for (final item in unread) {
       try {
         await repo.markAsRead(item.id);
-      } catch (_) {}
+      } catch (e) {
+        failureCount++;
+        AppLogger.w('Échec marquage lu pour notif ${item.id}: $e');
+      }
+    }
+
+    if (failureCount > 0) {
+      AppErrorReporter.reportWarning('$failureCount notification(s) n\'ont pas pu être synchronisées', tag: 'Notifications');
     }
 
     state = AsyncValue.data(

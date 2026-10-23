@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 
 /// Coordonnée géographique pour le calcul d'itinéraires
 class CoordinateModel extends Equatable {
@@ -198,7 +199,9 @@ class RouteModel extends Equatable {
         if (m is Map) {
           try {
             parsedManeuvers.add(ManeuverModel.fromJson(m));
-          } catch (_) {}
+          } catch (e) {
+            AppLogger.w('Format de manœuvre ignoré: $e');
+          }
         }
       }
     }

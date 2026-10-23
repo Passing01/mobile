@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:qvgestion_mobile/core/config/env_config.dart';
 import 'package:qvgestion_mobile/core/network/api_exceptions.dart';
 import 'package:qvgestion_mobile/core/network/auth_interceptor.dart';
+import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/storage/token_storage.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 
@@ -50,7 +51,14 @@ class ApiClient {
           return handler.next(response);
         },
         onError: (error, handler) {
-          AppLogger.w('⚠️ [${error.response?.statusCode ?? 'ERR'}] ${error.requestOptions.uri}: ${error.message}');
+          final uri = error.requestOptions.uri;
+          final method = error.requestOptions.method;
+          final status = error.response?.statusCode != null
+              ? 'HTTP ${error.response!.statusCode}'
+              : 'ERR_RESEAU';
+          final msg = error.message ?? error.toString();
+          AppLogger.error('❌ [$status] $method ${uri.path}: $msg', tag: 'ApiClient');
+          DebugInfo.instance.setLastApiError('$method ${uri.path} -> $status ($msg)');
           return handler.next(error);
         },
       ),

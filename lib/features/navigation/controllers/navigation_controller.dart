@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mb;
 import 'package:turf/turf.dart' as turf;
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/services/route_service.dart';
 import 'package:qvgestion_mobile/core/services/voice_guide_service.dart';
 import 'package:qvgestion_mobile/core/services/traffic_telemetry_service.dart';
@@ -143,8 +144,9 @@ class NavigationController {
         await voice.say('Recalcul de l\'itinéraire');
         await _loadRoute(p);
         _offRoute = 0;
-      } catch (_) {
-        // En cas de perte réseau temporaire, on conserve l'ancien tracé
+      } catch (e) {
+        AppLogger.w('Échec recalcul itinéraire ($e), conservation du tracé actif');
+        AppErrorReporter.reportWarning('Réseau instable: échec du recalcul d\'itinéraire', tag: 'Navigation');
       } finally {
         _lastReroute = DateTime.now();
         _rerouting = false;
@@ -166,7 +168,9 @@ class NavigationController {
         ),
         mb.MapAnimationOptions(duration: 800),
       );
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.d('Animation caméra de navigation interrompue: $e');
+    }
 
     // 5. Arrivée à destination (< 25 mètres)
     if (_waypoints.isNotEmpty) {

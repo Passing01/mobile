@@ -25,7 +25,8 @@ class VoiceGuide {
     try {
       _audioPlayer = AudioPlayer();
       return _audioPlayer;
-    } catch (_) {
+    } catch (e) {
+      AppLogger.w('Initialisation AudioPlayer impossible: $e');
       return null;
     }
   }
@@ -49,20 +50,28 @@ class VoiceGuide {
       await initialize();
       try {
         await _player?.stop();
-      } catch (_) {}
+      } catch (e) {
+        AppLogger.d('Arrêt lecteur audio ignoré: $e');
+      }
       try {
         await _tts.stop();
-      } catch (_) {}
+      } catch (e) {
+        AppLogger.d('Arrêt TTS ignoré: $e');
+      }
 
       final lang = language.toLowerCase();
       if (lang == 'mos' || lang == 'diu') {
         try {
           await _tts.setLanguage('fr-FR');
-        } catch (_) {}
+        } catch (e) {
+          AppLogger.d('Langue TTS non supportée: $e');
+        }
       } else {
         try {
           await _tts.setLanguage('fr-FR');
-        } catch (_) {}
+        } catch (e) {
+          AppLogger.d('Langue TTS non supportée: $e');
+        }
       }
       await _tts.speak(text);
     } catch (e) {
@@ -91,7 +100,8 @@ class VoiceGuide {
           text = (step.localizedInstruction ?? step.originalInstruction ?? '').toString();
           audioUrl = step.audioUrl as String?;
           landmarkName = step.landmarkName as String?;
-        } catch (_) {
+        } catch (e) {
+          AppLogger.d('Parsing step non standard: $e');
           text = step.toString();
         }
       }
@@ -131,19 +141,27 @@ class VoiceGuide {
   Future<void> stop() async {
     try {
       await _tts.stop();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.d('Arrêt TTS ignoré: $e');
+    }
     try {
       await _player?.stop();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.d('Arrêt AudioPlayer ignoré: $e');
+    }
   }
 
   void dispose() {
     try {
       _tts.stop();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.d('Arrêt TTS ignoré: $e');
+    }
     try {
       _audioPlayer?.dispose();
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.d('Dispose AudioPlayer ignoré: $e');
+    }
   }
 }
 

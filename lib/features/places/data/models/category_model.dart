@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter/material.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 
 /// Catégorie de lieux (POI) retournée par le backend QvGestion / FASO NAV
 /// Conforme à la taxonomie pilotée par l'administrateur
@@ -107,7 +108,9 @@ class CategoryModel extends Equatable {
       } else if (hex.length == 8) {
         return Color(int.parse(hex, radix: 16));
       }
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.d('Erreur parsing hex couleur: $e (valeur: $color)');
+    }
     return const Color(0xFF2563EB);
   }
 

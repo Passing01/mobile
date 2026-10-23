@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:qvgestion_mobile/core/config/app_config.dart';
 import 'package:qvgestion_mobile/core/config/app_constants.dart';
+import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
@@ -195,7 +198,10 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
       }
 
       if (permission == LocationPermission.deniedForever) {
-        AppLogger.w('Permission de localisation refusée définitivement');
+        AppErrorReporter.reportError(
+          'Permission de localisation refusée définitivement. Activez le GPS dans les paramètres.',
+          tag: 'GPS',
+        );
         return;
       }
 
@@ -207,6 +213,7 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
           lon: lastKnown.longitude,
           label: 'Ma position GPS',
         );
+        DebugInfo.instance.updateGpsFix(lastKnown);
         AppLogger.i('Position GPS obtenue immédiatement (cache natif): ${lastKnown.latitude}, ${lastKnown.longitude}');
       }
 
@@ -225,6 +232,7 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
           lon: pos.longitude,
           label: 'Position GPS précise',
         );
+        DebugInfo.instance.updateGpsFix(pos);
       });
 
       // 3. Demande de position GPS précise directe (matériel GPS)
@@ -242,6 +250,7 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
           lon: position.longitude,
           label: 'Position GPS précise',
         );
+        DebugInfo.instance.updateGpsFix(position);
       } catch (e) {
         try {
           final position = await Geolocator.getCurrentPosition(
@@ -255,7 +264,9 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
             lon: position.longitude,
             label: 'Position GPS réelle',
           );
-        } catch (_) {
+          DebugInfo.instance.updateGpsFix(position);
+        } catch (innerErr) {
+          AppLogger.w('Point GPS en attente: $innerErr');
           if (lastKnown != null) {
             AppLogger.i('Maintien de la dernière position valide.');
           }
@@ -268,7 +279,11 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
           'ℹ️ Service GPS natif en attente. Position Ouaga active.',
         );
       } else {
-        AppLogger.w('Erreur géolocalisation: $e');
+        AppErrorReporter.reportError(
+          'Erreur signal GPS mobile',
+          error: e,
+          tag: 'GPS',
+        );
       }
     }
   }
@@ -720,9 +735,11 @@ final nearbyPlacesProvider = FutureProvider<List<PlaceModel>>((ref) async {
 
     // Fusionner et filtrer rigoureusement selon les catégories sélectionnées
     final Map<String, PlaceModel> placesMap = {};
-    for (final p in defaultOuagaIconicPlaces) {
-      if (matchesCategory(p)) {
-        placesMap[p.nom.toLowerCase().trim()] = p;
+    if (AppConfig.testMode) {
+      for (final p in defaultOuagaIconicPlaces) {
+        if (matchesCategory(p)) {
+          placesMap[p.nom.toLowerCase().trim()] = p;
+        }
       }
     }
     for (final p in backendPlaces) {
@@ -732,9 +749,17 @@ final nearbyPlacesProvider = FutureProvider<List<PlaceModel>>((ref) async {
     }
 
     return placesMap.values.toList();
-  } catch (e) {
-    AppLogger.w('Utilisation du catalogue de repères locaux de secours: $e');
-    return defaultOuagaIconicPlaces.where(matchesCategory).toList();
+  } catch (e, st) {
+    AppErrorReporter.reportError(
+      'Impossible de récupérer les lieux à proximité',
+      error: e,
+      stackTrace: st,
+      tag: 'PlacesAPI',
+    );
+    if (AppConfig.testMode) {
+      return defaultOuagaIconicPlaces.where(matchesCategory).toList();
+    }
+    return [];
   }
 });
 

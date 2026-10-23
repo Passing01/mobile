@@ -4,8 +4,11 @@ import 'package:latlong2/latlong.dart' as ll;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mb;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:turf/turf.dart' as turf;
+import 'package:qvgestion_mobile/core/config/app_config.dart';
 import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/config/env_config.dart';
+import 'package:qvgestion_mobile/core/debug/debug_info.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/navigation/presentation/providers/navigation_providers.dart';
@@ -116,7 +119,9 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
               zoom: 16.5,
             ),
           );
-        } catch (_) {}
+        } catch (e) {
+          AppLogger.d('Erreur animation caméra véhicule: $e');
+        }
       }
     }
   }
@@ -203,7 +208,9 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
           ),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.d('Erreur activation puck localisation: $e');
+    }
   }
 
   Future<void> _refreshMarkers() async {
@@ -268,7 +275,7 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
 
       final candidatePlaces = [
         ...places,
-        ...defaultOuagaIconicPlaces,
+        if (AppConfig.testMode) ...defaultOuagaIconicPlaces,
       ];
 
       final filteredPlaces = (selectedCats.isNotEmpty || selectedSlug != null)
@@ -327,7 +334,9 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
     try {
       final currentTab = ref.read(currentTabProvider);
       if (currentTab != FasoNavTab.explorer) return;
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.d('Erreur lecture onglet: $e');
+    }
 
     final manager = _polylineAnnotationManager;
     if (manager == null || _isSyncingRoute) return;
@@ -337,7 +346,9 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
       final activeRoute = ref.read(activeRouteProvider).value;
       try {
         await manager.deleteAll();
-      } catch (_) {}
+      } catch (e) {
+        AppLogger.d('Suppression ancienne ligne tracé: $e');
+      }
 
       if (activeRoute != null && activeRoute.geometry.length >= 2) {
         final lineCoords = <turf.Position>[];
@@ -617,7 +628,8 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
       double minDistance = double.infinity;
       final candidates = [
         ..._placesByAnnotationId.values,
-        ...(ref.read(nearbyPlacesProvider).value ?? defaultOuagaIconicPlaces),
+        ...(ref.read(nearbyPlacesProvider).value ??
+            (AppConfig.testMode ? defaultOuagaIconicPlaces : <PlaceModel>[])),
       ];
       for (final place in candidates) {
         final dLat = (place.latitude - lat).abs();
@@ -630,6 +642,10 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
       }
 
       if (closestPlace != null) {
+        DebugInfo.instance.setDestination(
+          ll.LatLng(closestPlace.latitude, closestPlace.longitude),
+          source: 'lieu touché',
+        );
         widget.onPlaceSelected(closestPlace);
         flyTo(closestPlace.latitude, closestPlace.longitude, zoom: 16.0);
         return;
@@ -646,8 +662,19 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
         quartier: 'Ouagadougou',
       );
 
+      DebugInfo.instance.setDestination(
+        ll.LatLng(lat, lon),
+        source: 'lieu touché',
+      );
       widget.onPlaceSelected(customPlace);
-    } catch (_) {}
+    } catch (e, st) {
+      AppErrorReporter.reportError(
+        'Erreur lors de la sélection sur la carte',
+        error: e,
+        stackTrace: st,
+        tag: 'MapTouch',
+      );
+    }
   }
 
   @override

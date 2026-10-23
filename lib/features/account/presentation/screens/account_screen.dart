@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qvgestion_mobile/core/config/app_config.dart';
+import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/widgets/auth_modal_sheet.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/widgets/language_selector_chips.dart';
+import 'package:qvgestion_mobile/features/debug/presentation/screens/debug_screen.dart';
 
 /// Onglet 4 officiel : Profil, Préférences Linguistiques & Sécurité
 class AccountScreen extends ConsumerWidget {
@@ -201,7 +205,80 @@ class AccountScreen extends ConsumerWidget {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          const AppVersionFooter(),
         ],
+      ),
+    );
+  }
+}
+
+class AppVersionFooter extends StatefulWidget {
+  const AppVersionFooter({super.key});
+
+  @override
+  State<AppVersionFooter> createState() => _AppVersionFooterState();
+}
+
+class _AppVersionFooterState extends State<AppVersionFooter> {
+  int _taps = 0;
+  DateTime? _lastTap;
+
+  void _onTap() {
+    final now = DateTime.now();
+    if (_lastTap == null || now.difference(_lastTap!) > const Duration(seconds: 2)) {
+      _taps = 1;
+    } else {
+      _taps++;
+    }
+    _lastTap = now;
+
+    if (_taps >= 4 && _taps < 7) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Plus que ${7 - _taps} appui(s) pour ouvrir la console de debug'),
+          duration: const Duration(milliseconds: 800),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else if (_taps >= 7) {
+      _taps = 0;
+      HapticFeedback.mediumImpact();
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const DebugScreen()),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          children: [
+            Text(
+              'FASO NAV v${AppConstants.appVersion}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: Color(0xFF94A3B8),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Mobilité Urbaine Ouagadougou • ${AppConfig.testMode ? "MODE TEST ACTIF" : "PRODUCTION"}',
+              style: TextStyle(
+                fontSize: 10,
+                color: AppConfig.testMode ? Colors.amber.shade800 : const Color(0xFFCBD5E1),
+                fontWeight: AppConfig.testMode ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

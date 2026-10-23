@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:qvgestion_mobile/core/config/app_config.dart';
+import 'package:qvgestion_mobile/core/debug/debug_info.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/core/widgets/loaders/app_shimmer.dart';
@@ -23,13 +27,31 @@ class RoutesScreen extends ConsumerStatefulWidget {
 }
 
 class _RoutesScreenState extends ConsumerState<RoutesScreen> {
-  final TextEditingController _originController =
-      TextEditingController(text: 'Ouagadougou, 1200 Logements');
-  final TextEditingController _destController =
-      TextEditingController(text: 'Grand Marché Rood-Woko');
+  late final TextEditingController _originController;
+  late final TextEditingController _destController;
 
-  double _destLat = 12.3685;
-  double _destLon = -1.5222;
+  double? _destLat;
+  double? _destLon;
+
+  @override
+  void initState() {
+    super.initState();
+    if (AppConfig.testMode) {
+      _originController = TextEditingController(text: 'Ouagadougou, 1200 Logements');
+      _destController = TextEditingController(text: 'Grand Marché Rood-Woko');
+      _destLat = 12.3685;
+      _destLon = -1.5222;
+      DebugInfo.instance.setDestination(
+        const LatLng(12.3685, -1.5222),
+        source: 'défaut',
+      );
+    } else {
+      _originController = TextEditingController();
+      _destController = TextEditingController();
+      _destLat = null;
+      _destLon = null;
+    }
+  }
 
   @override
   void dispose() {
@@ -39,6 +61,14 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
   }
 
   void _calculate() {
+    if (_destLat == null || _destLon == null) {
+      AppErrorReporter.reportError(
+        'Veuillez sélectionner ou rechercher une destination pour calculer l\'itinéraire.',
+        tag: 'Navigation',
+      );
+      return;
+    }
+
     final currentLocation = ref.read(currentLocationProvider);
     final selectedMode = ref.read(selectedRouteModeProvider);
 
@@ -46,12 +76,12 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
           origin: CoordinateModel(
             lat: currentLocation.lat,
             lon: currentLocation.lon,
-            name: _originController.text,
+            name: _originController.text.isNotEmpty ? _originController.text : 'Ma position GPS',
           ),
           destination: CoordinateModel(
-            lat: _destLat,
-            lon: _destLon,
-            name: _destController.text,
+            lat: _destLat!,
+            lon: _destLon!,
+            name: _destController.text.isNotEmpty ? _destController.text : 'Destination',
           ),
           mode: selectedMode,
         );
@@ -136,6 +166,10 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
                                   _destLat = chosen.latitude;
                                   _destLon = chosen.longitude;
                                 });
+                                DebugInfo.instance.setDestination(
+                                  LatLng(chosen.latitude, chosen.longitude),
+                                  source: 'recherche',
+                                );
                                 ref
                                     .read(selectedPlaceProvider.notifier)
                                     .select(chosen);
@@ -268,8 +302,14 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
                                 id: 777777,
                                 nom: _destController.text,
                                 categorieId: 1,
-                                latitude: _destLat,
-                                longitude: _destLon,
+                                latitude: _destLat ??
+                                    (route.geometry.isNotEmpty
+                                        ? route.geometry.last[0]
+                                        : 12.3685),
+                                longitude: _destLon ??
+                                    (route.geometry.isNotEmpty
+                                        ? route.geometry.last[1]
+                                        : -1.5222),
                                 adresse: _destController.text,
                               ),
                             );

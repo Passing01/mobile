@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/traffic/data/models/live_tracking_model.dart';
 import 'package:qvgestion_mobile/features/traffic/data/models/telemetry_ping_model.dart';
 import 'package:qvgestion_mobile/features/traffic/data/repositories/traffic_repository.dart';
@@ -52,8 +53,8 @@ class ActiveTrackingNotifier extends Notifier<LiveTrackingModel?> {
         ),
       );
       state = updated;
-    } catch (_) {
-      // Ignorer silencieusement une erreur ponctuelle de mise à jour pour ne pas bloquer la conduite
+    } catch (e) {
+      AppLogger.w('Échec mise à jour suivi en direct: $e');
     }
   }
 
@@ -98,8 +99,8 @@ class TelemetryNotifier extends Notifier<void> {
           bearing: bearing,
         ),
       );
-    } catch (_) {
-      // Mode best-effort en arrière-plan
+    } catch (e) {
+      AppLogger.w('Échec émission ping télémétrie: $e');
     }
   }
 }

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qvgestion_mobile/core/config/app_config.dart';
+import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/network/api_client.dart';
 import 'package:qvgestion_mobile/core/network/api_endpoints.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
@@ -38,7 +40,9 @@ class PlacesRepository {
         try {
           final p = PlaceModel.fromJson(jsonDecode(raw) as Map<String, dynamic>);
           existingPlaces[p.id] = p;
-        } catch (_) {}
+        } catch (e) {
+          AppLogger.w('Format de lieu en cache invalide ignoré: $e');
+        }
       }
       for (final p in places) {
         existingPlaces[p.id] = p;
@@ -46,7 +50,9 @@ class PlacesRepository {
       final toSave =
           existingPlaces.values.map((p) => jsonEncode(p.toJson())).toList();
       await prefs.setStringList(_placesCacheKey, toSave);
-    } catch (_) {}
+    } catch (e) {
+      AppLogger.w('Impossible d\'écrire les lieux dans le cache: $e');
+    }
   }
 
   Future<List<PlaceModel>> _getCachedPlaces() async {
@@ -57,10 +63,13 @@ class PlacesRepository {
       for (final str in list) {
         try {
           places.add(PlaceModel.fromJson(jsonDecode(str) as Map<String, dynamic>));
-        } catch (_) {}
+        } catch (e) {
+          AppLogger.w('Erreur décodage lieu en cache: $e');
+        }
       }
       return places;
-    } catch (_) {
+    } catch (e) {
+      AppLogger.w('Impossible de lire le cache de lieux: $e');
       return [];
     }
   }
@@ -121,24 +130,33 @@ class PlacesRepository {
           try {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString(cacheKey, jsonEncode(data));
-          } catch (_) {}
+          } catch (e) {
+            AppLogger.w('Impossible de mettre en cache les lieux: $e');
+          }
           final map = <String, dynamic>{};
           data.forEach((k, v) => map[k.toString()] = v);
           return map;
         }
       }
 
-      // Si l'API retourne 0 points dans cette zone (ex: bdd distante incomplète), injecter les repères locaux
-      final localFeatures = _buildLocalFallbackFeatures(categories);
-      if (localFeatures.isNotEmpty) {
-        return {
-          'type': 'FeatureCollection',
-          'features': localFeatures,
-        };
+      // Si l'API retourne 0 points dans cette zone, injecter les repères locaux uniquement en mode test
+      if (AppConfig.testMode) {
+        final localFeatures = _buildLocalFallbackFeatures(categories);
+        if (localFeatures.isNotEmpty) {
+          return {
+            'type': 'FeatureCollection',
+            'features': localFeatures,
+          };
+        }
       }
       return {'type': 'FeatureCollection', 'features': []};
-    } catch (e) {
-      AppLogger.w('API GeoJSON places indisponible ($e). Utilisation du cache ou catalogue local.');
+    } catch (e, st) {
+      AppErrorReporter.reportError(
+        'Erreur GeoJSON lieux API',
+        error: e,
+        stackTrace: st,
+        tag: 'PlacesAPI',
+      );
       try {
         final prefs = await SharedPreferences.getInstance();
         final raw = prefs.getString(cacheKey);
@@ -148,13 +166,17 @@ class PlacesRepository {
             return decoded;
           }
         }
-      } catch (_) {}
+      } catch (cacheErr) {
+        AppLogger.w('Lecture cache GeoJSON impossible: $cacheErr');
+      }
 
-      // Génération locale de secours depuis defaultOuagaIconicPlaces
-      return {
-        'type': 'FeatureCollection',
-        'features': _buildLocalFallbackFeatures(categories),
-      };
+      if (AppConfig.testMode) {
+        return {
+          'type': 'FeatureCollection',
+          'features': _buildLocalFallbackFeatures(categories),
+        };
+      }
+      return {'type': 'FeatureCollection', 'features': []};
     }
   }
 
@@ -220,14 +242,21 @@ class PlacesRepository {
         await _savePlacesToCache(fetched);
       }
       return fetched;
-    } catch (e) {
-      AppLogger.w('API nearby indisponible ($e). Utilisation du catalogue local et du cache hors-ligne.');
-      // En mode hors-ligne, récupérer le cache sauvegardé et fusionner avec le catalogue burkinabé
+    } catch (e, st) {
+      AppErrorReporter.reportError(
+        'Erreur de récupération des lieux proches',
+        error: e,
+        stackTrace: st,
+        tag: 'PlacesAPI',
+      );
+      // En mode hors-ligne, récupérer le cache sauvegardé et fusionner avec le catalogue si mode test
       final cached = await _getCachedPlaces();
       final allMap = <int, PlaceModel>{};
 
-      for (final p in defaultOuagaIconicPlaces) {
-        allMap[p.id] = p;
+      if (AppConfig.testMode) {
+        for (final p in defaultOuagaIconicPlaces) {
+          allMap[p.id] = p;
+        }
       }
       for (final p in cached) {
         allMap[p.id] = p;
@@ -314,13 +343,20 @@ class PlacesRepository {
               (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
       }
       return fetched;
-    } catch (e) {
-      AppLogger.w('API search indisponible ($e). Recherche dans le cache local et les repères enregistrés.');
+    } catch (e, st) {
+      AppErrorReporter.reportError(
+        'Erreur lors de la recherche de lieux',
+        error: e,
+        stackTrace: st,
+        tag: 'PlacesAPI',
+      );
       final cached = await _getCachedPlaces();
       final allMap = <int, PlaceModel>{};
 
-      for (final p in defaultOuagaIconicPlaces) {
-        allMap[p.id] = p;
+      if (AppConfig.testMode) {
+        for (final p in defaultOuagaIconicPlaces) {
+          allMap[p.id] = p;
+        }
       }
       for (final p in cached) {
         allMap[p.id] = p;
