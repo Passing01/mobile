@@ -735,7 +735,6 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
             onTapUp: (details) => _onMapTapped(details.localPosition),
             child: mb.MapWidget(
               key: const ValueKey('mapbox_main_map'),
-              textureView: true,
               styleUri: _currentStyle.uri,
               onMapCreated: _onMapCreated,
               onMapIdleListener: (event) {

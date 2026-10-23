@@ -197,7 +197,6 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   }) {
     ref.read(selectedPlaceProvider.notifier).select(destinationPlace);
     ref.read(selectedRouteModeProvider.notifier).selectMode(mode);
-    ref.read(mapScreenStateProvider.notifier).toRouteSelection();
 
     final currentLocation = ref.read(currentLocationProvider);
     final origin = CoordinateModel(
@@ -216,6 +215,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
           destination: destination,
           mode: mode,
         );
+    ref.read(mapScreenStateProvider.notifier).toRouteSelection();
   }
 
   @override

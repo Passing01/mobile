@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 
 class IconicPlaceItem {
   final String title;
@@ -220,12 +219,6 @@ class ExploreOuagaDrawer extends ConsumerWidget {
                 return GestureDetector(
                   onTap: () {
                     onPlaceTap(place);
-                    // Trouve le lieu correspondant dans nearbyPlaces si disponible
-                    ref.read(currentLocationProvider.notifier).updateLocation(
-                          place.latitude,
-                          place.longitude,
-                          place.title,
-                        );
                   },
                   child: Container(
                     width: 215,

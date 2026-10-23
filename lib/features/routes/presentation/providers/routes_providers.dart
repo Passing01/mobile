@@ -106,8 +106,12 @@ final multiModeRoutesProvider =
   );
 
   // 1. Récupérer ou calculer l'itinéraire pour le mode sélectionné
-  RouteModel? primaryRoute = ref.read(activeRouteProvider).value;
+  final activeRouteState = ref.watch(activeRouteProvider);
+  RouteModel? primaryRoute = activeRouteState.value;
   if (primaryRoute == null || primaryRoute.geometry.length < 2) {
+    if (activeRouteState.isLoading) {
+      return {};
+    }
     try {
       primaryRoute = await repository.calculateRoute(
         origin: origin,
