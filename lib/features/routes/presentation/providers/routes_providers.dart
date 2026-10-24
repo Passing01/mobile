@@ -46,6 +46,7 @@ class ActiveRouteNotifier extends Notifier<AsyncValue<RouteModel?>> {
     required CoordinateModel destination,
     required String mode,
   }) async {
+    AppLogger.d('[ActiveRouteNotifier.calculate] Début calcul mode=$mode, origin=${origin.lat},${origin.lon}, dest=${destination.lat},${destination.lon}');
     state = const AsyncValue.loading();
     try {
       final repository = ref.read(routesRepositoryProvider);
@@ -54,7 +55,9 @@ class ActiveRouteNotifier extends Notifier<AsyncValue<RouteModel?>> {
         destination: destination,
         mode: mode,
       );
+      AppLogger.d('[ActiveRouteNotifier.calculate] Route reçue: ${route.distanceMeters}m, ${route.geometry.length} points. Mise à jour de state.');
       state = AsyncValue.data(route);
+      AppLogger.d('[ActiveRouteNotifier.calculate] State mis à jour avec succès.');
       DebugInfo.instance.setRoute(
         points: route.geometry.length,
         distanceM: route.distanceMeters,
@@ -94,6 +97,8 @@ final multiModeRoutesProvider =
   final repository = ref.watch(routesRepositoryProvider);
   final selectedMode = ref.watch(selectedRouteModeProvider);
 
+  AppLogger.d('[multiModeRoutesProvider] Exécution pour selectedMode=$selectedMode');
+
   final origin = CoordinateModel(
     lat: currentLocation.lat,
     lon: currentLocation.lon,
@@ -108,11 +113,14 @@ final multiModeRoutesProvider =
   // 1. Récupérer ou calculer l'itinéraire pour le mode sélectionné
   final activeRouteState = ref.watch(activeRouteProvider);
   RouteModel? primaryRoute = activeRouteState.value;
+  AppLogger.d('[multiModeRoutesProvider] activeRouteState isLoading=${activeRouteState.isLoading}, hasValue=${primaryRoute != null}');
   if (primaryRoute == null || primaryRoute.geometry.length < 2) {
     if (activeRouteState.isLoading) {
+      AppLogger.d('[multiModeRoutesProvider] activeRouteState est loading, retour map vide temporaire');
       return {};
     }
     try {
+      AppLogger.d('[multiModeRoutesProvider] Calcul de secours direct via repository pour $selectedMode');
       primaryRoute = await repository.calculateRoute(
         origin: origin,
         destination: destination,
@@ -127,6 +135,7 @@ final multiModeRoutesProvider =
   if (primaryRoute != null) {
     results[primaryRoute.mode] = primaryRoute;
     final dist = primaryRoute.distanceMeters;
+    AppLogger.d('[multiModeRoutesProvider] Génération des 4 modes basés sur ${primaryRoute.mode} ($dist m)');
 
     // Vitesses moyennes calibrées selon les spécifications mobilité du Burkina Faso
     const modeSpeeds = {

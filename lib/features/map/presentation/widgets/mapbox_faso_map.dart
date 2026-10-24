@@ -331,21 +331,36 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
   /// Tracé ultra-sécurisé de l'itinéraire actif via PolylineAnnotationManager
   Future<void> _syncActiveRoute() async {
     if (!mounted) return;
+    AppLogger.d('[_syncActiveRoute] Début sync route');
     try {
       final currentTab = ref.read(currentTabProvider);
-      if (currentTab != FasoNavTab.explorer) return;
+      if (currentTab != FasoNavTab.explorer) {
+        AppLogger.d('[_syncActiveRoute] Pas sur l\'onglet explorer, retour');
+        return;
+      }
     } catch (e) {
       AppLogger.d('Erreur lecture onglet: $e');
     }
 
     final manager = _polylineAnnotationManager;
-    if (manager == null || _isSyncingRoute) return;
+    if (manager == null) {
+      AppLogger.w('[_syncActiveRoute] PolylineAnnotationManager est NULL');
+      return;
+    }
+    if (_isSyncingRoute) {
+      AppLogger.d('[_syncActiveRoute] Synchronisation déjà en cours');
+      return;
+    }
     _isSyncingRoute = true;
 
     try {
       final activeRoute = ref.read(activeRouteProvider).value;
+      AppLogger.d('[_syncActiveRoute] activeRoute points=${activeRoute?.geometry.length ?? 0}');
+
       try {
+        AppLogger.d('[_syncActiveRoute] manager.deleteAll() début');
         await manager.deleteAll();
+        AppLogger.d('[_syncActiveRoute] manager.deleteAll() fin');
       } catch (e) {
         AppLogger.d('Suppression ancienne ligne tracé: $e');
       }
@@ -370,6 +385,7 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
 
         if (lineCoords.length >= 2 && mounted) {
           try {
+            AppLogger.d('[_syncActiveRoute] manager.create() début avec ${lineCoords.length} coords');
             await manager.create(
               mb.PolylineAnnotationOptions(
                 geometry: turf.LineString(coordinates: lineCoords),
@@ -377,6 +393,7 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
                 lineWidth: 6.5,
               ),
             );
+            AppLogger.d('[_syncActiveRoute] manager.create() fin');
           } catch (e) {
             AppLogger.w('Création annotation polyline Mapbox: $e');
           }
@@ -390,7 +407,9 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
             if (minLat.isFinite && maxLat.isFinite && minLon.isFinite && maxLon.isFinite) {
               final centerLat = (minLat + maxLat) / 2;
               final centerLon = (minLon + maxLon) / 2;
+              AppLogger.d('[_syncActiveRoute] flyTo bounds début ($centerLat, $centerLon)');
               await flyTo(centerLat, centerLon, zoom: 13.5);
+              AppLogger.d('[_syncActiveRoute] flyTo bounds fin');
             }
           }
         }
@@ -399,6 +418,7 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
       AppLogger.w('Tracé d\'itinéraire Mapbox: $e');
     } finally {
       _isSyncingRoute = false;
+      AppLogger.d('[_syncActiveRoute] Fin sync route');
     }
   }
 
@@ -408,6 +428,7 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
     final map = _mapboxMap;
     if (map == null || !lat.isFinite || !lng.isFinite) return;
 
+    AppLogger.d('[flyTo] Début flyTo lat=$lat, lng=$lng, zoom=$zoom');
     try {
       await map.flyTo(
         mb.CameraOptions(
@@ -416,6 +437,7 @@ class _MapboxFasoMapState extends ConsumerState<MapboxFasoMap> {
         ),
         mb.MapAnimationOptions(duration: 900),
       );
+      AppLogger.d('[flyTo] Fin flyTo');
     } catch (e) {
       AppLogger.w('flyTo Mapbox: $e');
     }
