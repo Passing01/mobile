@@ -54,6 +54,27 @@ class _FasoMapState extends State<FasoMap> {
   }
 
   @override
+  void didUpdateWidget(covariant FasoMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.styleUrl != widget.styleUrl) {
+      debugPrint('[MAP] Basculement style vers: ${widget.styleUrl}');
+      AppLogger.i('[MAP] Basculement style vers: ${widget.styleUrl}');
+      if (_c != null) {
+        _c!.setStyle(widget.styleUrl);
+      }
+      if (isUnderTest) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          debugPrint('[MAP] style chargé');
+          AppLogger.i('[MAP] style chargé');
+          if (_c != null) {
+            await widget.onStyleReady(_c!);
+          }
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
@@ -78,6 +99,7 @@ class _FasoMapState extends State<FasoMap> {
           )
         else
           MapLibreMap(
+            key: const Key('fasonav_maplibre_map'),
             styleString: widget.styleUrl,
             initialCameraPosition: const CameraPosition(
               target: LatLng(12.3714, -1.5197), // Centre de Ouagadougou

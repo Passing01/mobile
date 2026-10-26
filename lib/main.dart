@@ -5,6 +5,7 @@ import 'package:qvgestion_mobile/core/config/env_config.dart';
 import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/theme/app_theme.dart';
+import 'package:qvgestion_mobile/core/theme/theme_provider.dart';
 import 'package:qvgestion_mobile/features/navigation/presentation/screens/main_tab_scaffold.dart';
 
 void main() async {
@@ -18,18 +19,20 @@ void main() async {
   );
 }
 
-class QvGestionApp extends StatelessWidget {
+class QvGestionApp extends ConsumerWidget {
   const QvGestionApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
+
     return MaterialApp(
       scaffoldMessengerKey: AppErrorReporter.messengerKey,
       title: AppConstants.appName,
       debugShowCheckedModeBanner: EnvConfig.isDev,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       home: const MainTabScaffold(),
     );
   }

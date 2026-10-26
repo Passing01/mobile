@@ -13,20 +13,28 @@ class MapConfig {
     required this.attribution,
   });
 
-  static const defaultLiberty = 'https://tiles.openfreemap.org/styles/liberty';
-  static const defaultBright = 'https://tiles.openfreemap.org/styles/bright';
+  static const defaultFasoLight = 'assets/map/styles/faso-light.json';
+  static const defaultFasoDark = 'assets/map/styles/faso-dark.json';
   static const defaultAttribution = '© OpenStreetMap contributors';
 
   factory MapConfig.defaults() => const MapConfig(
-        styleLight: defaultLiberty,
-        styleDark: defaultBright,
+        styleLight: defaultFasoLight,
+        styleDark: defaultFasoDark,
         attribution: defaultAttribution,
       );
 
+  static String _sanitizeUrl(String? url, String fallback) {
+    if (url == null || url.isEmpty) return fallback;
+    if (url.startsWith('http://') && url.contains('railway.app')) {
+      return url.replaceFirst('http://', 'https://');
+    }
+    return url;
+  }
+
   factory MapConfig.fromJson(Map<String, dynamic> json) {
     return MapConfig(
-      styleLight: json['style_light'] as String? ?? defaultLiberty,
-      styleDark: json['style_dark'] as String? ?? defaultBright,
+      styleLight: _sanitizeUrl(json['style_light'] as String?, defaultFasoLight),
+      styleDark: _sanitizeUrl(json['style_dark'] as String?, defaultFasoDark),
       attribution: json['attribution'] as String? ?? defaultAttribution,
     );
   }

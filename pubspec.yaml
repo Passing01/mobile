@@ -78,6 +78,7 @@ flutter:
 
   assets:
     - .env
+    - assets/map/styles/
 
 
   # An image asset can refer to one or more resolution-specific "variants", see

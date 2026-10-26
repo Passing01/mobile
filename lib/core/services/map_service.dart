@@ -1,6 +1,8 @@
 import 'dart:math';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:qvgestion_mobile/core/theme/map_theme.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
@@ -10,7 +12,7 @@ import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 abstract class MapService {
   void attach(MapLibreMapController controller);
   bool get isReady;
-  Future<void> setupLayers();
+  Future<void> setupLayers({MapTheme theme = MapTheme.light});
   Future<void> setPlaces(List<PlaceModel> places);
   Future<void> setRoute(RouteModel? route);
   Future<void> clearRoute();
@@ -30,6 +32,7 @@ abstract class MapService {
     double padding = 50.0,
   });
   Future<PlaceModel?> queryPlaceAt(Point<double> point);
+  MapTheme get currentTheme;
   void dispose();
 }
 
@@ -39,6 +42,10 @@ class MapLibreMapService implements MapService {
   bool _layersConfigured = false;
   List<PlaceModel> _cachedPlaces = [];
   RouteModel? _cachedRoute;
+  MapTheme _currentTheme = MapTheme.light;
+
+  @override
+  MapTheme get currentTheme => _currentTheme;
 
   static const String placesSourceId = 'fasonav-places-source';
   static const String placesClusterLayerId = 'fasonav-places-clusters';
@@ -46,6 +53,7 @@ class MapLibreMapService implements MapService {
   static const String placesPointsLayerId = 'fasonav-places-points';
 
   static const String routeSourceId = 'fasonav-route-source';
+  static const String routeCasingLayerId = 'fasonav-route-casing';
   static const String routeLayerId = 'fasonav-route-layer';
 
   @override
@@ -58,9 +66,10 @@ class MapLibreMapService implements MapService {
   }
 
   @override
-  Future<void> setupLayers() async {
+  Future<void> setupLayers({MapTheme theme = MapTheme.light}) async {
     final c = _controller;
     if (c == null) return;
+    _currentTheme = theme;
 
     try {
       // 1. Initialisation de la source des lieux avec grappes (clustering)
@@ -95,6 +104,7 @@ class MapLibreMapService implements MapService {
         placesClusterCountLayerId,
         const SymbolLayerProperties(
           textField: [Expressions.get, 'point_count_abbreviated'],
+          textFont: ['Noto Sans Regular'],
           textColor: '#FFFFFF',
           textSize: 12.0,
         ),
@@ -102,29 +112,38 @@ class MapLibreMapService implements MapService {
         enableInteraction: false,
       );
 
-      // Couche des points individuels colorés selon leur catégorie
+      // Couche des points individuels colorés selon leur catégorie (taille interpolée, contour contrasté)
       await c.addCircleLayer(
         placesSourceId,
         placesPointsLayerId,
-        const CircleLayerProperties(
-          circleColor: [Expressions.get, 'color'],
-          circleRadius: 8.0,
-          circleStrokeColor: '#FFFFFF',
-          circleStrokeWidth: 2.0,
-        ),
+        MapTheme.placeCircleProperties,
         filter: ['!', ['has', 'point_count']],
         enableInteraction: true,
       );
 
-      // 2. Initialisation de la source et couche du tracé d'itinéraire
+      // 2. Initialisation de la source et des couches de tracé d'itinéraire (liseré de contraste + intérieur)
       final routeGeoJson = _buildRouteGeoJson(_cachedRoute);
       await c.addGeoJsonSource(routeSourceId, routeGeoJson);
 
+      // 2.1 Couche de liseré de contraste (blanc en clair, très sombre en nuit)
+      await c.addLineLayer(
+        routeSourceId,
+        routeCasingLayerId,
+        LineLayerProperties(
+          lineColor: theme.routeCasing,
+          lineWidth: 8.5,
+          lineJoin: 'round',
+          lineCap: 'round',
+        ),
+        enableInteraction: false,
+      );
+
+      // 2.2 Couche intérieure du tracé (bleu vif haute lisibilité)
       await c.addLineLayer(
         routeSourceId,
         routeLayerId,
-        const LineLayerProperties(
-          lineColor: '#2563EB',
+        LineLayerProperties(
+          lineColor: theme.route,
           lineWidth: 6.0,
           lineJoin: 'round',
           lineCap: 'round',
@@ -133,7 +152,7 @@ class MapLibreMapService implements MapService {
       );
 
       _layersConfigured = true;
-      AppLogger.i('Couches MapLibre configurées avec succès');
+      AppLogger.i('Couches MapLibre configurées avec succès (Thème: ${theme.isDark ? "Dark" : "Light"})');
     } catch (e) {
       AppLogger.w('Initialisation couches MapLibre: $e');
     }
@@ -284,8 +303,15 @@ class MapLibreMapService implements MapService {
     if (c == null || !_layersConfigured) return null;
 
     try {
-      final features = await c.queryRenderedFeatures(
-        point,
+      // Boîte tactile d'au moins 48px autour du doigt pour un confort optimal en extérieur
+      final touchBox = Rect.fromCenter(
+        center: Offset(point.x, point.y),
+        width: 48.0,
+        height: 48.0,
+      );
+
+      final features = await c.queryRenderedFeaturesInRect(
+        touchBox,
         [placesPointsLayerId],
         null,
       );

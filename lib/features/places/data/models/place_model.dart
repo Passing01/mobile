@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:qvgestion_mobile/core/theme/map_theme.dart';
 import 'category_model.dart';
 
 /// Modèle d'un lieu d'intérêt (POI) connecté à l'API QvGestion / FASO NAV
@@ -250,7 +251,8 @@ class PlaceModel extends Equatable {
         'id': uuid ?? id.toString(),
         'name': nom,
         'category': categorie?.slug ?? 'divers',
-        'color': categorie?.color ?? '#2563EB',
+        'color': MapTheme.colorForCategory(categorie?.slug),
+        'strokeColor': MapTheme.strokeColorForCategory(categorie?.slug),
         'size': categorie?.markerSize ?? importance,
         'importance': importance,
         'tags': tags,

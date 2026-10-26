@@ -1,29 +1,84 @@
 import 'dart:math';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvgestion_mobile/core/config/map_config.dart';
 import 'package:qvgestion_mobile/core/services/map_service.dart';
+import 'package:qvgestion_mobile/core/theme/map_theme.dart';
+import 'package:qvgestion_mobile/core/theme/theme_provider.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 
 void main() {
   group('MapConfig Tests', () {
-    test('MapConfig.defaults retourne les styles et l\'attribution OpenFreeMap/OSM', () {
+    test('MapConfig.defaults retourne les styles souverains FASO NAV locaux', () {
       final config = MapConfig.defaults();
-      expect(config.styleLight, 'https://tiles.openfreemap.org/styles/liberty');
-      expect(config.styleDark, 'https://tiles.openfreemap.org/styles/bright');
+      expect(config.styleLight, 'assets/map/styles/faso-light.json');
+      expect(config.styleDark, 'assets/map/styles/faso-dark.json');
       expect(config.attribution, '© OpenStreetMap contributors');
     });
 
-    test('MapConfig.fromJson parse correctement la réponse du backend', () {
+    test('MapConfig.fromJson parse correctement la réponse du backend et assainit HTTP en HTTPS', () {
       final json = {
-        'style_light': 'https://custom.server.com/styles/liberty',
-        'style_dark': 'https://custom.server.com/styles/dark',
+        'style_light': 'http://qvgestion-backend-production.up.railway.app/static/map/styles/faso-light.json',
+        'style_dark': 'https://custom.server.com/static/map/styles/faso-dark.json',
         'attribution': '© OpenStreetMap contributors',
       };
       final config = MapConfig.fromJson(json);
-      expect(config.styleLight, 'https://custom.server.com/styles/liberty');
-      expect(config.styleDark, 'https://custom.server.com/styles/dark');
+      expect(config.styleLight, 'https://qvgestion-backend-production.up.railway.app/static/map/styles/faso-light.json');
+      expect(config.styleDark, 'https://custom.server.com/static/map/styles/faso-dark.json');
       expect(config.attribution, '© OpenStreetMap contributors');
+    });
+  });
+
+  group('MapTheme Tests', () {
+    test('MapTheme.light et dark fournissent les couleurs du cahier des charges', () {
+      expect(MapTheme.light.route, '#1A73E8');
+      expect(MapTheme.light.routeCasing, '#FFFFFF');
+      expect(MapTheme.light.label, '#2B2A27');
+      expect(MapTheme.light.halo, '#FFFFFF');
+      expect(MapTheme.light.isDark, false);
+
+      expect(MapTheme.dark.route, '#5AA2FF');
+      expect(MapTheme.dark.routeCasing, '#0F1722');
+      expect(MapTheme.dark.label, '#E8ECF2');
+      expect(MapTheme.dark.halo, '#0F1722');
+      expect(MapTheme.dark.isDark, true);
+    });
+
+    test('MapTheme.colorForCategory attribue les couleurs franches normalisées', () {
+      expect(MapTheme.colorForCategory('pharmacie'), '#00A651');
+      expect(MapTheme.colorForCategory('hopital-sante'), '#E53935');
+      expect(MapTheme.colorForCategory('maquis-restaurant'), '#FB8C00');
+      expect(MapTheme.colorForCategory('station-service'), '#FDD835');
+      expect(MapTheme.colorForCategory('administration'), '#1E88E5');
+      expect(MapTheme.colorForCategory('banque-distributeur'), '#8E24AA');
+      expect(MapTheme.colorForCategory('ecole-universite'), '#00ACC1');
+      expect(MapTheme.colorForCategory('marche-commerce'), '#8D6E63');
+    });
+
+    test('MapTheme.strokeColorForCategory assure le contour sombre pour la station au soleil', () {
+      expect(MapTheme.strokeColorForCategory('station-service'), '#2B2A27');
+      expect(MapTheme.strokeColorForCategory('pharmacie'), '#FFFFFF');
+      expect(MapTheme.strokeColorForCategory('hopital'), '#FFFFFF');
+    });
+  });
+
+  group('ThemeModeNotifier Tests', () {
+    test('ThemeModeNotifier bascule entre les modes', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      expect(container.read(themeModeProvider), ThemeMode.system);
+
+      container.read(themeModeProvider.notifier).setThemeMode(ThemeMode.light);
+      expect(container.read(themeModeProvider), ThemeMode.light);
+
+      container.read(themeModeProvider.notifier).toggle();
+      expect(container.read(themeModeProvider), ThemeMode.dark);
+
+      container.read(themeModeProvider.notifier).toggle();
+      expect(container.read(themeModeProvider), ThemeMode.light);
     });
   });
 
@@ -31,6 +86,7 @@ void main() {
     test('MapLibreMapService initialise et met en cache places et routes', () async {
       final service = MapLibreMapService();
       expect(service.isReady, false);
+      expect(service.currentTheme, MapTheme.light);
 
       final place = PlaceModel(
         id: 1,

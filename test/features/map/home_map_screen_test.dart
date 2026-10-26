@@ -179,4 +179,31 @@ void main() {
     expect(find.text('Prenez la voie de droite vers le carrefour'), findsOneWidget);
     expect(find.byTooltip('Arrêter la navigation'), findsOneWidget);
   });
+
+  testWidgets('Bouton fab_toggle_theme permet de basculer instantanément entre mode clair et mode sombre',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(createTestWidget());
+    await tester.pumpAndSettle();
+
+    // Vérifier la présence du bouton de bascule jour/nuit
+    final toggleBtn = find.byKey(const Key('fab_toggle_theme'));
+    expect(toggleBtn, findsOneWidget);
+
+    // Initialement en mode clair, l'icône est dark_mode_rounded
+    expect(find.byIcon(Icons.dark_mode_rounded), findsOneWidget);
+
+    // Clic pour passer en mode sombre (ou inverser)
+    await tester.tap(toggleBtn);
+    await tester.pumpAndSettle();
+
+    // Après bascule, l'icône devient light_mode_rounded
+    expect(find.byIcon(Icons.light_mode_rounded), findsOneWidget);
+
+    // Clic pour revenir en mode clair
+    await tester.tap(toggleBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.dark_mode_rounded), findsOneWidget);
+  });
 }
+

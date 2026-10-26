@@ -17,6 +17,8 @@ import 'package:qvgestion_mobile/features/auth/presentation/providers/auth_notif
 import 'package:qvgestion_mobile/features/auth/presentation/widgets/auth_modal_sheet.dart';
 import 'package:qvgestion_mobile/core/config/map_config.dart';
 import 'package:qvgestion_mobile/core/services/map_service.dart';
+import 'package:qvgestion_mobile/core/theme/map_theme.dart';
+import 'package:qvgestion_mobile/core/theme/theme_provider.dart';
 import 'package:qvgestion_mobile/core/widgets/modals/about_credits_modal.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/explore_ouaga_drawer.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/faso_category_pills.dart';
@@ -276,7 +278,15 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       });
     });
 
-    final styleUrl = mapConfigAsync.value?.styleLight ?? MapConfig.defaultLiberty;
+    final themeMode = ref.watch(themeModeProvider);
+    final platformBrightness = MediaQuery.platformBrightnessOf(context);
+    final isDark = themeMode == ThemeMode.dark ||
+        (themeMode == ThemeMode.system && platformBrightness == Brightness.dark);
+    final mapTheme = isDark ? MapTheme.dark : MapTheme.light;
+
+    final styleUrl = isDark
+        ? (mapConfigAsync.value?.styleDark ?? MapConfig.defaultFasoDark)
+        : (mapConfigAsync.value?.styleLight ?? MapConfig.defaultFasoLight);
     final attributionText = mapConfigAsync.value?.attribution ?? MapConfig.defaultAttribution;
 
     return Scaffold(
@@ -288,7 +298,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             attributionText: attributionText,
             onStyleReady: (controller) async {
               mapService.attach(controller);
-              await mapService.setupLayers();
+              await mapService.setupLayers(theme: mapTheme);
               final places = ref.read(nearbyPlacesProvider).value ?? [];
               if (places.isNotEmpty) {
                 await mapService.setPlaces(places);
@@ -379,6 +389,35 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                       child: const Icon(
                         Icons.campaign_rounded,
                         color: Color(0xFFDC2626),
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Bouton bascule Mode Plein Soleil / Nuit
+                  GestureDetector(
+                    key: const Key('fab_toggle_theme'),
+                    onTap: () {
+                      ref.read(themeModeProvider.notifier).toggle();
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                        color: isDark ? const Color(0xFFF59E0B) : const Color(0xFF4B5563),
                         size: 24,
                       ),
                     ),
