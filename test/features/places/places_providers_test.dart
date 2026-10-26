@@ -5,25 +5,26 @@ import 'package:qvgestion_mobile/features/places/presentation/providers/places_p
 
 void main() {
   group('Places Providers Tests', () {
-    test('SelectedCategoryNotifier bascule (toggle) correctement', () {
+    test('SelectedCategories bascule (toggle) correctement', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
 
-      expect(container.read(selectedCategorySlugProvider), isNull);
+      expect(container.read(selectedCategoriesProvider), isEmpty);
 
-      container.read(selectedCategorySlugProvider.notifier).selectCategory('pharmacie');
-      expect(container.read(selectedCategorySlugProvider), 'pharmacie');
+      container.read(selectedCategoriesProvider.notifier).toggle('pharmacie');
+      expect(container.read(selectedCategoriesProvider), {'pharmacie'});
 
       // Taper à nouveau sur la même catégorie la désélectionne
-      container.read(selectedCategorySlugProvider.notifier).selectCategory('pharmacie');
-      expect(container.read(selectedCategorySlugProvider), isNull);
+      container.read(selectedCategoriesProvider.notifier).toggle('pharmacie');
+      expect(container.read(selectedCategoriesProvider), isEmpty);
 
-      // Sélectionner une autre
-      container.read(selectedCategorySlugProvider.notifier).selectCategory('station-service');
-      expect(container.read(selectedCategorySlugProvider), 'station-service');
+      // Sélectionner deux catégories
+      container.read(selectedCategoriesProvider.notifier).toggle('pharmacie');
+      container.read(selectedCategoriesProvider.notifier).toggle('station-service');
+      expect(container.read(selectedCategoriesProvider), {'pharmacie', 'station-service'});
 
-      container.read(selectedCategorySlugProvider.notifier).clear();
-      expect(container.read(selectedCategorySlugProvider), isNull);
+      container.read(selectedCategoriesProvider.notifier).clear();
+      expect(container.read(selectedCategoriesProvider), isEmpty);
     });
 
     test('CurrentLocationNotifier met à jour la position', () {

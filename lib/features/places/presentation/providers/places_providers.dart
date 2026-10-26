@@ -25,26 +25,23 @@ final categoriesProvider = FutureProvider<List<CategoryModel>>((ref) async {
 });
 
 /// Gestionnaire de la sélection MULTIPLE de catégories (conforme à FASO NAV)
-class SelectedCategoriesNotifier extends Notifier<Set<String>> {
+class SelectedCategories extends Notifier<Set<String>> {
   @override
   Set<String> build() => {};
 
-  void toggleCategory(String slug) {
-    final next = Set<String>.from(state);
-    if (next.contains(slug)) {
-      next.remove(slug);
-    } else {
-      next.add(slug);
-    }
+  void toggle(String slug) {
+    final next = {...state};
+    next.contains(slug) ? next.remove(slug) : next.add(slug);
     state = next;
-    ref.read(selectedCategorySlugProvider.notifier).syncFromCategories(next);
   }
+
+  void toggleCategory(String slug) => toggle(slug);
 
   void selectCategory(String? slug) {
     if (slug == null) {
       clear();
     } else {
-      toggleCategory(slug);
+      toggle(slug);
     }
   }
 
@@ -53,53 +50,17 @@ class SelectedCategoriesNotifier extends Notifier<Set<String>> {
       clear();
     } else {
       state = {slug};
-      ref.read(selectedCategorySlugProvider.notifier).syncFromCategories(state);
     }
   }
 
   void clear() {
     state = {};
-    ref.read(selectedCategorySlugProvider.notifier).syncFromCategories(state);
   }
 }
 
 final selectedCategoriesProvider =
-    NotifierProvider<SelectedCategoriesNotifier, Set<String>>(
-  SelectedCategoriesNotifier.new,
-);
-
-/// Gestionnaire de la catégorie sélectionnée (slug) pour compatibilité ascendante
-class SelectedCategoryNotifier extends Notifier<String?> {
-  @override
-  String? build() => null;
-
-  void syncFromCategories(Set<String> categories) {
-    state = categories.isNotEmpty ? categories.last : null;
-  }
-
-  void selectCategory(String? slug) {
-    if (state == slug) {
-      state = null;
-      ref.read(selectedCategoriesProvider.notifier).clear();
-    } else {
-      state = slug;
-      if (slug != null) {
-        ref.read(selectedCategoriesProvider.notifier).selectOnly(slug);
-      } else {
-        ref.read(selectedCategoriesProvider.notifier).clear();
-      }
-    }
-  }
-
-  void clear() {
-    state = null;
-    ref.read(selectedCategoriesProvider.notifier).clear();
-  }
-}
-
-final selectedCategorySlugProvider =
-    NotifierProvider<SelectedCategoryNotifier, String?>(
-  SelectedCategoryNotifier.new,
+    NotifierProvider<SelectedCategories, Set<String>>(
+  SelectedCategories.new,
 );
 
 /// Bounding box courante de la carte (format: 'lng0,lat0,lng1,lat1')
@@ -135,8 +96,156 @@ final placesGeoJsonProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   );
 });
 
+/// État des lieux chargés pour la zone visible (conforme Étape 4)
+class PlacesState extends Equatable {
+  final bool isLoading;
+  final int count;
+  final String? categoryLabel;
+  final String? errorMessage;
+  final bool hasError;
+  final bool isZero;
+  final bool truncated;
+  final Map<String, dynamic> lastGeoJson;
+  final List<PlaceModel> placesList;
+
+  const PlacesState({
+    this.isLoading = false,
+    this.count = 0,
+    this.categoryLabel,
+    this.errorMessage,
+    this.hasError = false,
+    this.isZero = false,
+    this.truncated = false,
+    this.lastGeoJson = const {'type': 'FeatureCollection', 'features': []},
+    this.placesList = const [],
+  });
+
+  factory PlacesState.initial() => const PlacesState();
+
+  factory PlacesState.ok({
+    required int count,
+    required Map<String, dynamic> geoJson,
+    required List<PlaceModel> places,
+    String? categoryLabel,
+    bool truncated = false,
+  }) =>
+      PlacesState(
+        isLoading: false,
+        count: count,
+        isZero: count == 0,
+        hasError: false,
+        truncated: truncated,
+        lastGeoJson: geoJson,
+        placesList: places,
+        categoryLabel: categoryLabel,
+      );
+
+  factory PlacesState.error(
+    String message, {
+    required Map<String, dynamic> previousGeoJson,
+    required List<PlaceModel> previousPlaces,
+    int previousCount = 0,
+    String? categoryLabel,
+    bool truncated = false,
+  }) =>
+      PlacesState(
+        isLoading: false,
+        count: previousCount,
+        errorMessage: message,
+        hasError: true,
+        isZero: false,
+        truncated: truncated,
+        lastGeoJson: previousGeoJson,
+        placesList: previousPlaces,
+        categoryLabel: categoryLabel,
+      );
+
+  factory PlacesState.loading({
+    required Map<String, dynamic> previousGeoJson,
+    required List<PlaceModel> previousPlaces,
+    int previousCount = 0,
+    String? categoryLabel,
+    bool truncated = false,
+  }) =>
+      PlacesState(
+        isLoading: true,
+        count: previousCount,
+        truncated: truncated,
+        lastGeoJson: previousGeoJson,
+        placesList: previousPlaces,
+        categoryLabel: categoryLabel,
+      );
+
+  @override
+  List<Object?> get props => [
+        isLoading,
+        count,
+        categoryLabel,
+        errorMessage,
+        hasError,
+        isZero,
+        truncated,
+        lastGeoJson,
+        placesList,
+      ];
+}
+
+class PlacesNotifier extends Notifier<PlacesState> {
+  @override
+  PlacesState build() => PlacesState.initial();
+
+  void setLoading() {
+    state = PlacesState.loading(
+      previousGeoJson: state.lastGeoJson,
+      previousPlaces: state.placesList,
+      previousCount: state.count,
+      categoryLabel: state.categoryLabel,
+      truncated: state.truncated,
+    );
+  }
+
+  void setOk({
+    required int count,
+    required Map<String, dynamic> geoJson,
+    required List<PlaceModel> places,
+    String? categoryLabel,
+    bool truncated = false,
+  }) {
+    state = PlacesState.ok(
+      count: count,
+      geoJson: geoJson,
+      places: places,
+      categoryLabel: categoryLabel,
+      truncated: truncated,
+    );
+  }
+
+  void setError(String message) {
+    state = PlacesState.error(
+      message,
+      previousGeoJson: state.lastGeoJson,
+      previousPlaces: state.placesList,
+      previousCount: state.count,
+      categoryLabel: state.categoryLabel,
+      truncated: state.truncated,
+    );
+  }
+
+  void clear() {
+    state = PlacesState.initial();
+  }
+}
+
+final placesStateProvider = NotifierProvider<PlacesNotifier, PlacesState>(
+  PlacesNotifier.new,
+);
+
 /// Compteur dynamique de lieux chargés
 final placesCountProvider = Provider<int>((ref) {
+  final placesState = ref.watch(placesStateProvider);
+  if (placesState.count > 0 || placesState.hasError || placesState.isZero) {
+    return placesState.count;
+  }
   final geoJson = ref.watch(placesGeoJsonProvider).value;
   if (geoJson == null) return 0;
   final features = geoJson['features'] as List<dynamic>?;
@@ -673,63 +782,28 @@ final nearbyPlacesProvider = FutureProvider<List<PlaceModel>>((ref) async {
   final repository = ref.watch(placesRepositoryProvider);
   final location = ref.watch(currentLocationProvider);
   final selectedCats = ref.watch(selectedCategoriesProvider);
-  final selectedSlug = ref.watch(selectedCategorySlugProvider);
 
   bool matchesCategory(PlaceModel place) {
-    if (selectedCats.isEmpty && selectedSlug == null) return true;
+    if (selectedCats.isEmpty) return true;
     final slug = (place.categorie?.slug ?? '').toLowerCase();
     final nom = place.nom.toLowerCase();
 
     for (final cat in selectedCats) {
       final c = cat.toLowerCase();
-      if (slug == c || slug.contains(c)) {
-        return true;
-      }
-      if (c == 'pharmacie' && (slug.contains('pharmacie') || nom.contains('pharmacie'))) {
-        return true;
-      }
-      if ((c == 'station-service' || c == 'station') &&
-          (slug.contains('station') || nom.contains('station') || nom.contains('total') || nom.contains('shell') || nom.contains('oil'))) {
-        return true;
-      }
-      if ((c == 'maquis-restaurant' || c == 'maquis') &&
-          (slug.contains('maquis') || slug.contains('restaurant') || nom.contains('maquis') || nom.contains('restaurant'))) {
-        return true;
-      }
-      if ((c == 'hopital' || c == 'sante') &&
-          (slug.contains('hopital') || nom.contains('chuy') || nom.contains('yalgado') || nom.contains('clinique') || nom.contains('cma'))) {
-        return true;
-      }
-      if (c == 'administration' &&
-          (slug.contains('admin') || nom.contains('mairie') || nom.contains('commissariat') || nom.contains('minist'))) {
+      if (slug == c || slug.contains(c) || nom.contains(c)) {
         return true;
       }
     }
-
-    if (selectedSlug != null) {
-      final s = selectedSlug.toLowerCase();
-      if (slug == s || slug.contains(s)) {
-        return true;
-      }
-      if (s == 'pharmacie' && (slug.contains('pharmacie') || nom.contains('pharmacie'))) {
-        return true;
-      }
-      if ((s == 'station-service' || s == 'station') &&
-          (slug.contains('station') || nom.contains('station') || nom.contains('total') || nom.contains('shell'))) {
-        return true;
-      }
-    }
-
     return false;
   }
 
   try {
-    final searchRadius = (selectedCats.isNotEmpty || selectedSlug != null) ? 15000.0 : 25000.0;
+    final searchRadius = selectedCats.isNotEmpty ? 15000.0 : 25000.0;
     final backendPlaces = await repository.getNearbyPlaces(
       lat: location.lat,
       lon: location.lon,
       radius: searchRadius,
-      slug: selectedSlug ?? (selectedCats.isNotEmpty ? selectedCats.first : null),
+      slug: selectedCats.isNotEmpty ? selectedCats.first : null,
       limit: 60,
     );
 
@@ -748,20 +822,24 @@ final nearbyPlacesProvider = FutureProvider<List<PlaceModel>>((ref) async {
       }
     }
 
-    return placesMap.values.toList();
-  } catch (e, st) {
-    AppErrorReporter.reportError(
-      'Impossible de récupérer les lieux à proximité',
-      error: e,
-      stackTrace: st,
-      tag: 'PlacesAPI',
-    );
+    final result = placesMap.values.toList();
+    result.sort((a, b) {
+      final distA = a.distanceTo(location.lat, location.lon);
+      final distB = b.distanceTo(location.lat, location.lon);
+      return distA.compareTo(distB);
+    });
+    return result;
+  } catch (e) {
+    AppLogger.w('Échec chargement lieux backend: $e');
     if (AppConfig.testMode) {
-      return defaultOuagaIconicPlaces.where(matchesCategory).toList();
+      final localFiltered = defaultOuagaIconicPlaces.where(matchesCategory).toList();
+      localFiltered.sort((a, b) => a.distanceTo(location.lat, location.lon).compareTo(b.distanceTo(location.lat, location.lon)));
+      return localFiltered;
     }
     return [];
   }
 });
+
 
 /// Gestionnaire du lieu sélectionné (affiché dans la PoiPreviewCard)
 class SelectedPlaceNotifier extends Notifier<PlaceModel?> {

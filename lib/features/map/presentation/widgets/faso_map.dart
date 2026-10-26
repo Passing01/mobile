@@ -11,6 +11,7 @@ class FasoMap extends StatefulWidget {
     required this.styleUrl,
     required this.onStyleReady,
     this.onTap,
+    this.onCameraIdle,
     this.attributionText = '© OpenStreetMap contributors',
     this.onAttributionTap,
   });
@@ -23,6 +24,9 @@ class FasoMap extends StatefulWidget {
 
   /// Callback déclenché à chaque clic ou toucher sur la carte
   final void Function(Point<double> screen, LatLng geo)? onTap;
+
+  /// Callback déclenché à l'arrêt du mouvement de la caméra
+  final VoidCallback? onCameraIdle;
 
   /// Libellé officiel d'attribution OpenStreetMap
   final String attributionText;
@@ -125,6 +129,7 @@ class _FasoMapState extends State<FasoMap> {
               AppLogger.i('[MAP] toucher ${latLng.latitude}, ${latLng.longitude}');
               widget.onTap?.call(point, latLng);
             },
+            onCameraIdle: widget.onCameraIdle,
           ),
 
         // Badge officiel d'attribution OpenStreetMap visible et cliquable

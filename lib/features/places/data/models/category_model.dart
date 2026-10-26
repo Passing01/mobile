@@ -94,8 +94,6 @@ class CategoryModel extends Equatable {
     if (labels.containsKey('fr') && labels['fr']!.isNotEmpty) {
       return labels['fr']!;
     }
-    if (slug == 'pharmacie') return 'Pharmacies de garde';
-    if (slug == 'station-service') return 'Stations d\'essence';
     return nom;
   }
 
@@ -114,34 +112,39 @@ class CategoryModel extends Equatable {
     return const Color(0xFF2563EB);
   }
 
-  /// Icône Flutter correspondante au slug backend
+  /// Icône Flutter correspondante au champ 'icone' ou au 'slug' de la table categories
   IconData get iconData {
-    switch (slug) {
-      case 'pharmacie':
-        return Icons.local_pharmacy_rounded;
-      case 'station-service':
-      case 'station':
-        return Icons.local_gas_station_rounded;
-      case 'maquis-restaurant':
-      case 'maquis':
-        return Icons.restaurant_rounded;
-      case 'hopital-sante':
-      case 'hopital':
-        return Icons.local_hospital_rounded;
-      case 'banque-distributeur':
-      case 'banque':
-        return Icons.account_balance_rounded;
-      case 'administration':
-        return Icons.account_balance_outlined;
-      case 'ecole':
-        return Icons.school_rounded;
-      case 'marche':
-        return Icons.storefront_rounded;
-      case 'patrimoine':
-        return Icons.museum_rounded;
-      default:
-        return Icons.place_rounded;
+    final key = icone.toLowerCase();
+    final slugKey = slug.toLowerCase();
+
+    if (key == 'local_pharmacy' || slugKey == 'pharmacie' || slugKey == 'pharmacy') {
+      return Icons.local_pharmacy_rounded;
     }
+    if (key == 'local_gas_station' || slugKey == 'station-service' || slugKey == 'gas_station') {
+      return Icons.local_gas_station_rounded;
+    }
+    if (key == 'restaurant' || slugKey == 'maquis-restaurant' || slugKey == 'maquis') {
+      return Icons.restaurant_rounded;
+    }
+    if (key == 'local_hospital' || slugKey == 'hopital-sante' || slugKey == 'hospital') {
+      return Icons.local_hospital_rounded;
+    }
+    if (key == 'credit_card' || key == 'account_balance' || slugKey == 'banque-distributeur' || slugKey == 'banque') {
+      return Icons.account_balance_rounded;
+    }
+    if (key == 'school' || slugKey == 'ecole-universite') {
+      return Icons.school_rounded;
+    }
+    if (key == 'storefront' || slugKey == 'marche-commerce' || slugKey == 'marche') {
+      return Icons.storefront_rounded;
+    }
+    if (key == 'museum' || slugKey == 'tourisme-culture') {
+      return Icons.museum_rounded;
+    }
+    if (key == 'account_balance_sharp' || slugKey == 'administration') {
+      return Icons.account_balance_rounded;
+    }
+    return Icons.place_rounded;
   }
 
   static String _defaultColorForSlug(String? slug) {

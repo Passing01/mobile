@@ -69,36 +69,30 @@ class FasoCategoryPills extends ConsumerWidget {
               final catIndex = selectedCategories.isNotEmpty ? index - 1 : index;
               final cat = filterableCats[catIndex];
               final isSelected = selectedCategories.contains(cat.slug);
-              final isPharmacy = cat.slug == 'pharmacie';
 
               // Couleurs dynamiques pilotées par la table categories
               final catColor = cat.displayColor;
-              Color backgroundColor;
-              Color foregroundColor;
-              Border? border;
+              final Color backgroundColor;
+              final Color foregroundColor;
+              final Border border;
 
               if (isSelected) {
                 backgroundColor = catColor;
                 foregroundColor = Colors.white;
                 border = Border.all(color: Colors.white, width: 2);
-              } else if (isPharmacy) {
-                backgroundColor = const Color(0xFFDCFCE7);
-                foregroundColor = const Color(0xFF166534);
-                border = Border.all(color: const Color(0xFF86EFAC));
               } else {
                 backgroundColor = Colors.white.withValues(alpha: 0.95);
                 foregroundColor = const Color(0xFF1F2937);
                 border = Border.all(color: const Color(0xFFE5E7EB));
               }
 
-              IconData icon = isSelected ? Icons.check_circle_rounded : cat.iconData;
-              Color iconColor = isSelected ? Colors.white : (isPharmacy ? const Color(0xFF166534) : catColor);
-
+              final IconData icon = isSelected ? Icons.check_circle_rounded : cat.iconData;
+              final Color iconColor = isSelected ? Colors.white : catColor;
               final label = cat.labelIn('fr');
 
               return GestureDetector(
                 onTap: () {
-                  ref.read(selectedCategoriesProvider.notifier).toggleCategory(cat.slug);
+                  ref.read(selectedCategoriesProvider.notifier).toggle(cat.slug);
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -124,21 +118,10 @@ class FasoCategoryPills extends ConsumerWidget {
                         label,
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: isSelected || isPharmacy ? FontWeight.w700 : FontWeight.w600,
+                          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
                           color: foregroundColor,
                         ),
                       ),
-                      if (isPharmacy && !isSelected) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF15803D),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),

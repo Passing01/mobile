@@ -82,10 +82,10 @@ class DebugInfo extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Enregistre la dernière erreur API survenue
-  void setLastApiError(String error) {
+  /// Enregistre ou efface la dernière erreur API survenue
+  void setLastApiError(String? error) {
     lastApiError = error;
-    lastApiErrorAt = DateTime.now();
+    lastApiErrorAt = error != null ? DateTime.now() : null;
     notifyListeners();
   }
 

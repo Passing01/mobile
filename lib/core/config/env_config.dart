@@ -74,13 +74,7 @@ class EnvConfig {
   static bool get isStaging => _environment == AppEnvironment.staging;
   static bool get isProd => _environment == AppEnvironment.prod;
 
-  /// Hôte de développement adapté selon la plateforme (10.0.2.2 pour émulateur Android, 127.0.0.1 pour Linux/Web/iOS)
-  static String get defaultHost {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      return '10.0.2.2:8000';
-    }
-    return '127.0.0.1:8000';
-  }
+  static String get defaultHost => '127.0.0.1:8000';
 
   /// URL de base HTTP de l'API Backend QvGestion
   static String get apiBaseUrl {

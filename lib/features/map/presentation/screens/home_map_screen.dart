@@ -39,6 +39,11 @@ import 'package:qvgestion_mobile/core/services/voice_guidance_service.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/voice_search_sheet.dart';
 import 'package:qvgestion_mobile/features/traffic/presentation/widgets/active_tracking_banner.dart';
 import 'package:qvgestion_mobile/features/traffic/presentation/widgets/share_trip_sheet.dart';
+import 'package:dio/dio.dart';
+import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
+import 'package:qvgestion_mobile/core/di/core_providers.dart';
+import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
+import 'package:qvgestion_mobile/features/places/presentation/widgets/places_list_bottom_sheet.dart';
 
 /// Écran principal Cartographie & Navigation QvGestion / FASO NAV
 /// Conforme à la maquette officielle avec carte OpenStreetMap fonctionnelle
@@ -59,6 +64,11 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   LatLng? _vehiclePosition;
   double _vehicleHeading = 0.0;
 
+  // État de chargement des lieux par zone visible (Étape 4)
+  maplibre.MapLibreMapController? _mapController;
+  Timer? _placesDebounce;
+  CancelToken? _placesCancelToken;
+
   LatLng? get vehiclePosition => _vehiclePosition;
 
   @override
@@ -73,7 +83,105 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   @override
   void dispose() {
     _simulationTimer?.cancel();
+    _placesDebounce?.cancel();
+    _placesCancelToken?.cancel();
     super.dispose();
+  }
+
+  void _onCameraIdle() {
+    _placesDebounce?.cancel();
+    _placesDebounce = Timer(const Duration(milliseconds: 350), _refreshPlaces);
+  }
+
+  Future<void> _refreshPlaces() async {
+    final c = _mapController ?? ref.read(mapServiceProvider).controller;
+    if (c == null) return;
+    final cats = ref.read(selectedCategoriesProvider);
+    final mapService = ref.read(mapServiceProvider);
+
+    if (cats.isEmpty) {
+      _placesCancelToken?.cancel();
+      await mapService.showPlaces(const {'type': 'FeatureCollection', 'features': []});
+      ref.read(placesStateProvider.notifier).clear();
+      return;
+    }
+
+    _placesCancelToken?.cancel();
+    _placesCancelToken = CancelToken();
+
+    try {
+      final b = await c.getVisibleRegion();
+      final bbox = '${b.southwest.longitude},${b.southwest.latitude},${b.northeast.longitude},${b.northeast.latitude}';
+      final zoom = c.cameraPosition?.zoom ?? 14.0;
+
+      ref.read(placesStateProvider.notifier).setLoading();
+
+      final apiClient = ref.read(apiClientProvider);
+      final res = await apiClient.dio.get<Map<String, dynamic>>(
+        '/places/',
+        cancelToken: _placesCancelToken,
+        queryParameters: {
+          'categories': cats.join(','),
+          'bbox': bbox,
+          'zoom': zoom,
+        },
+      );
+
+      final data = res.data;
+      if (data != null && data['features'] is List) {
+        final features = data['features'] as List;
+        final n = features.length;
+        final meta = data['meta'] as Map<String, dynamic>?;
+        final truncated = meta?['truncated'] == true;
+
+        AppLogger.i('[PLACES] GET categories=${cats.join(',')} bbox=$bbox -> $n lieux, tronqué=$truncated');
+        debugPrint('[PLACES] GET categories=${cats.join(',')} bbox=$bbox -> $n lieux, tronqué=$truncated');
+        DebugInfo.instance.setLastApiError(null);
+
+        await mapService.showPlaces(data);
+
+        final placesList = <PlaceModel>[];
+        for (final f in features) {
+          if (f is Map) {
+            try {
+              placesList.add(PlaceModel.fromGeoJsonFeature(Map<dynamic, dynamic>.from(f)));
+            } catch (_) {}
+          }
+        }
+
+        String? catLabel;
+        final allCats = ref.read(categoriesProvider).value ?? [];
+        if (cats.length == 1) {
+          final singleSlug = cats.first;
+          final foundCat = allCats.cast<CategoryModel?>().firstWhere(
+                (cat) => cat?.slug == singleSlug,
+                orElse: () => null,
+              );
+          catLabel = foundCat?.nom ?? singleSlug;
+        }
+
+        ref.read(placesStateProvider.notifier).setOk(
+          count: n,
+          geoJson: data,
+          places: placesList,
+          categoryLabel: catLabel,
+          truncated: truncated,
+        );
+      }
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) return;
+      final msg = e.message ?? 'Erreur réseau';
+      AppLogger.e('[PLACES] erreur $msg');
+      debugPrint('[PLACES] erreur $msg');
+      DebugInfo.instance.setLastApiError(msg);
+      ref.read(placesStateProvider.notifier).setError(msg);
+    } catch (e) {
+      final msg = e.toString();
+      AppLogger.e('[PLACES] erreur $msg');
+      debugPrint('[PLACES] erreur $msg');
+      DebugInfo.instance.setLastApiError(msg);
+      ref.read(placesStateProvider.notifier).setError(msg);
+    }
   }
 
   void _startNavigationSimulation(RouteModel route) {
@@ -260,8 +368,11 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     // Synchronisation position GPS vers MapService (dépose le repère de position)
     ref.listen(currentLocationProvider, (prev, next) {
       mapService.updateUserLocation(next.lat, next.lon);
-      if (next.lat != AppConstants.ouagaCenterLatitude ||
-          next.lon != AppConstants.ouagaCenterLongitude) {
+      if (prev == null ||
+          (prev.lat == AppConstants.ouagaCenterLatitude &&
+              prev.lon == AppConstants.ouagaCenterLongitude &&
+              (next.lat != AppConstants.ouagaCenterLatitude ||
+                  next.lon != AppConstants.ouagaCenterLongitude))) {
         mapService.animateCamera(lat: next.lat, lng: next.lon, zoom: 15.5);
       }
     });
@@ -278,6 +389,11 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
           _stopNavigationSimulation();
         }
       });
+    });
+
+    // Synchronisation de l'état des catégories vers le chargeur de lieux
+    ref.listen<Set<String>>(selectedCategoriesProvider, (previous, next) {
+      _refreshPlaces();
     });
 
     final isSatellite = ref.watch(isSatelliteModeProvider);
@@ -298,6 +414,9 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         ? '© OpenStreetMap contributors, © Esri'
         : (mapConfigAsync.value?.attribution ?? MapConfig.defaultAttribution);
 
+    final placesState = ref.watch(placesStateProvider);
+    final selectedCats = ref.watch(selectedCategoriesProvider);
+
     return Scaffold(
       body: Stack(
         children: [
@@ -305,7 +424,9 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
           FasoMap(
             styleUrl: styleUrl,
             attributionText: attributionText,
+            onCameraIdle: _onCameraIdle,
             onStyleReady: (controller) async {
+              _mapController = controller;
               mapService.attach(controller);
               await mapService.setupLayers(theme: mapTheme);
               final loc = ref.read(currentLocationProvider);
@@ -314,13 +435,21 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               if (selPlace != null) {
                 await mapService.setSelectedPlace(selPlace);
               }
-              final places = ref.read(nearbyPlacesProvider).value ?? [];
-              if (places.isNotEmpty) {
-                await mapService.setPlaces(places);
+              final lastGeoJson = ref.read(placesStateProvider).lastGeoJson;
+              if ((lastGeoJson['features'] as List?)?.isNotEmpty == true) {
+                await mapService.showPlaces(lastGeoJson);
+              } else {
+                final places = ref.read(nearbyPlacesProvider).value ?? [];
+                if (places.isNotEmpty) {
+                  await mapService.setPlaces(places);
+                }
               }
               final route = ref.read(activeRouteProvider).value;
               if (route != null) {
                 await mapService.setRoute(route);
+              }
+              if (ref.read(selectedCategoriesProvider).isNotEmpty) {
+                _refreshPlaces();
               }
             },
             onTap: (point, latLng) async {
@@ -526,6 +655,80 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // Bandeau officiel MODE TEST bien visible (Tâche 11)
+                  if (AppConfig.testMode)
+                    Container(
+                      key: const Key('banner_test_mode'),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                      color: const Color(0xFFEA580C),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.science_rounded, size: 16, color: Colors.white),
+                          SizedBox(width: 6),
+                          Text(
+                            'MODE TEST ACTIF',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Bandeau rouge d'erreur réseau avec conservation des points (Tâche 9)
+                  if (placesState.hasError)
+                    Container(
+                      key: const Key('banner_api_error'),
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.15),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              placesState.errorMessage ?? 'Erreur réseau (points précédents conservés)',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _refreshPlaces,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Réessayer',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   FasoNavHeader(
                     onNotificationsTap: () {
                       NotificationsSheet.show(context);
@@ -569,6 +772,134 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                   const WeatherTrafficTicker(),
                   const SizedBox(height: 8),
                   const FasoCategoryPills(),
+
+                  // Compteur dynamique et bouton Liste triée par distance (Tâche 10)
+                  if (selectedCats.isNotEmpty && placesState.count > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
+                      child: Row(
+                        children: [
+                          Container(
+                            key: const Key('badge_places_count'),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: const Color(0xFFE5E7EB)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.08),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF00A651),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${placesState.count} ${placesState.categoryLabel != null ? (placesState.count > 1 ? '${placesState.categoryLabel}s' : placesState.categoryLabel) : (placesState.count > 1 ? 'lieux' : 'lieu')}${placesState.truncated ? ' (tronqué)' : ''}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1F2937),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            key: const Key('btn_places_list'),
+                            onPressed: () {
+                              PlacesListBottomSheet.show(
+                                context,
+                                places: placesState.placesList,
+                                title: placesState.categoryLabel != null
+                                    ? '${placesState.categoryLabel}s dans la zone'
+                                    : 'Lieux dans la zone',
+                              );
+                            },
+                            icon: const Icon(Icons.format_list_bulleted_rounded, size: 16),
+                            label: const Text('Liste', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1E3A5F),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              minimumSize: Size.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                              elevation: 2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Message ZÉRO LIEU avec bouton "Voir toute la ville" (Tâche 9)
+                  if (selectedCats.isNotEmpty && placesState.isZero && !placesState.isLoading)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
+                      child: Container(
+                        key: const Key('banner_zero_places'),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFFDE68A)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded, color: Color(0xFFB45309), size: 18),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text(
+                                'Aucun lieu dans cette zone',
+                                style: TextStyle(
+                                  color: Color(0xFF92400E),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            ElevatedButton(
+                              key: const Key('btn_view_entire_city'),
+                              onPressed: () {
+                                ref.read(mapServiceProvider).animateCamera(
+                                  lat: AppConstants.ouagaCenterLatitude,
+                                  lng: AppConstants.ouagaCenterLongitude,
+                                  zoom: 12.5,
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFD97706),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                minimumSize: Size.zero,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                elevation: 0,
+                              ),
+                              child: const Text('Voir toute la ville', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -14,6 +14,9 @@ abstract class MapService {
   bool get isReady;
   Future<void> setupLayers({MapTheme theme = MapTheme.light});
   Future<void> setPlaces(List<PlaceModel> places);
+  Future<void> showPlaces(Map<String, dynamic> featureCollection);
+  Map<String, dynamic>? get cachedPlacesGeoJson;
+  MapLibreMapController? get controller;
   Future<void> setRoute(RouteModel? route);
   Future<void> clearRoute();
   Future<void> moveCamera({required double lat, required double lng, double zoom = 14.0});
@@ -43,16 +46,24 @@ class MapLibreMapService implements MapService {
   MapLibreMapController? _controller;
   bool _layersConfigured = false;
   List<PlaceModel> _cachedPlaces = [];
+  Map<String, dynamic>? _cachedPlacesGeoJson;
   RouteModel? _cachedRoute;
   MapTheme _currentTheme = MapTheme.light;
 
   @override
   MapTheme get currentTheme => _currentTheme;
 
-  static const String placesSourceId = 'fasonav-places-source';
-  static const String placesClusterLayerId = 'fasonav-places-clusters';
-  static const String placesClusterCountLayerId = 'fasonav-places-cluster-count';
-  static const String placesPointsLayerId = 'fasonav-places-points';
+  @override
+  MapLibreMapController? get controller => _controller;
+
+  @override
+  Map<String, dynamic>? get cachedPlacesGeoJson => _cachedPlacesGeoJson;
+
+  static const String placesSourceId = 'places';
+  static const String placesClusterLayerId = 'places-clusters';
+  static const String placesClusterCountLayerId = 'places-cluster-count';
+  static const String placesPointsLayerId = 'places-points';
+  static const String placesLabelsLayerId = 'places-labels';
 
   static const String routeSourceId = 'fasonav-route-source';
   static const String routeCasingLayerId = 'fasonav-route-casing';
@@ -88,29 +99,37 @@ class MapLibreMapService implements MapService {
     _currentTheme = theme;
 
     try {
-      // 1. Initialisation de la source des lieux avec grappes (clustering)
-      final placesGeoJson = _buildPlacesGeoJson(_cachedPlaces);
+      // 1. Initialisation de la source des lieux avec grappes (clustering conforme Étape 4)
+      final placesData = _cachedPlacesGeoJson ?? _buildPlacesGeoJson(_cachedPlaces);
       await c.addSource(
         placesSourceId,
         GeojsonSourceProperties(
-          data: placesGeoJson,
+          data: placesData,
           cluster: true,
+          clusterRadius: 48,
           clusterMaxZoom: 14,
-          clusterRadius: 50,
         ),
       );
 
-      // Couche des grappes (cercles bleu foncé avec contour blanc)
+      // Couche des grappes (cercles bleu foncé avec contour blanc et rayon adaptatif)
       await c.addCircleLayer(
         placesSourceId,
         placesClusterLayerId,
         const CircleLayerProperties(
           circleColor: '#1E3A5F',
-          circleRadius: 20.0,
           circleStrokeColor: '#FFFFFF',
-          circleStrokeWidth: 2.5,
+          circleStrokeWidth: 3.0,
+          circleRadius: [
+            Expressions.step,
+            [Expressions.get, 'point_count'],
+            18.0,
+            10,
+            24.0,
+            50,
+            32.0,
+          ],
         ),
-        filter: ['has', 'point_count'],
+        filter: [Expressions.has, 'point_count'],
         enableInteraction: true,
       );
 
@@ -120,21 +139,38 @@ class MapLibreMapService implements MapService {
         placesClusterCountLayerId,
         const SymbolLayerProperties(
           textField: [Expressions.get, 'point_count_abbreviated'],
-          textFont: ['Noto Sans Regular'],
           textColor: '#FFFFFF',
-          textSize: 12.0,
+          textSize: 14.0,
+          textAllowOverlap: true,
         ),
-        filter: ['has', 'point_count'],
+        filter: [Expressions.has, 'point_count'],
         enableInteraction: false,
       );
 
-      // Couche des points individuels colorés selon leur catégorie (taille interpolée, contour contrasté)
+      // Couche des points individuels colorés selon leur catégorie (gros points avec contour blanc)
       await c.addCircleLayer(
         placesSourceId,
         placesPointsLayerId,
         MapTheme.placeCircleProperties,
-        filter: ['!', ['has', 'point_count']],
+        filter: ['!', [Expressions.has, 'point_count']],
         enableInteraction: true,
+      );
+
+      // Couche des étiquettes des lieux à partir du zoom 14
+      await c.addSymbolLayer(
+        placesSourceId,
+        placesLabelsLayerId,
+        const SymbolLayerProperties(
+          textField: [Expressions.get, 'name'],
+          textSize: 12.0,
+          textOffset: [0, 1.6],
+          textColor: '#2B2A27',
+          textHaloColor: '#FFFFFF',
+          textHaloWidth: 1.5,
+        ),
+        filter: ['!', [Expressions.has, 'point_count']],
+        minzoom: 14.0,
+        enableInteraction: false,
       );
 
       // 2. Initialisation de la source et des couches de tracé d'itinéraire (liseré de contraste + intérieur)
@@ -260,12 +296,18 @@ class MapLibreMapService implements MapService {
   @override
   Future<void> setPlaces(List<PlaceModel> places) async {
     _cachedPlaces = List.unmodifiable(places);
+    final geojson = _buildPlacesGeoJson(places);
+    await showPlaces(geojson);
+  }
+
+  @override
+  Future<void> showPlaces(Map<String, dynamic> featureCollection) async {
+    _cachedPlacesGeoJson = featureCollection;
     final c = _controller;
     if (c == null || !_layersConfigured) return;
 
     try {
-      final geojson = _buildPlacesGeoJson(places);
-      await c.setGeoJsonSource(placesSourceId, geojson);
+      await c.setGeoJsonSource(placesSourceId, featureCollection);
     } catch (e) {
       AppLogger.w('Mise à jour source places MapLibre: $e');
     }

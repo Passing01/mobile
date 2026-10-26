@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:equatable/equatable.dart';
 import 'package:qvgestion_mobile/core/theme/map_theme.dart';
 import 'category_model.dart';
@@ -312,6 +313,20 @@ class PlaceModel extends Equatable {
       source: source ?? this.source,
       tags: tags ?? this.tags,
     );
+  }
+
+  /// Calcule la distance en mètres jusqu'aux coordonnées (lat, lon) via la formule de Haversine
+  double distanceTo(double lat, double lon) {
+    const double earthRadius = 6371000.0;
+    final dLat = (lat - latitude) * (math.pi / 180.0);
+    final dLon = (lon - longitude) * (math.pi / 180.0);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(latitude * (math.pi / 180.0)) *
+            math.cos(lat * (math.pi / 180.0)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return earthRadius * c;
   }
 
   /// Distance formatée lisible pour l'utilisateur burkinabé
