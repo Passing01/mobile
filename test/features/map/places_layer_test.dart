@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/places_layer.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
@@ -56,34 +56,28 @@ void main() {
       controller.dispose();
     });
 
-    test('PlacesLayer instancie les couches cluster et points', () async {
-      final source = GeoJsonSource(
-        id: 'places',
-        data: '{"type":"FeatureCollection","features":[]}',
+    test('PlacesLayer instancie les propriétés MapLibre cluster et points', () async {
+      const sourceProps = GeojsonSourceProperties(
+        data: {'type': 'FeatureCollection', 'features': []},
         cluster: true,
         clusterRadius: 48,
         clusterMaxZoom: 14,
       );
-      expect(source.id, 'places');
+      expect(sourceProps.cluster, true);
+      expect(sourceProps.clusterRadius, 48);
 
-      final clusterLayer = CircleLayer(
-        id: 'places-clusters',
-        sourceId: 'places',
-        filter: ['has', 'point_count'],
-        circleColor: 0xFF1E3A5F,
-        circleStrokeColor: 0xFFFFFFFF,
+      const clusterProps = CircleLayerProperties(
+        circleColor: '#1E3A5F',
+        circleStrokeColor: '#FFFFFF',
         circleStrokeWidth: 3.0,
       );
-      expect(clusterLayer.id, 'places-clusters');
-      expect(clusterLayer.circleColor, 0xFF1E3A5F);
+      expect(clusterProps.circleColor, '#1E3A5F');
 
-      final pointLayer = CircleLayer(
-        id: 'places-points',
-        sourceId: 'places',
-        filter: ['!', ['has', 'point_count']],
-        circleColorExpression: ['to-color', ['get', 'color']],
+      const pointProps = CircleLayerProperties(
+        circleColor: [Expressions.get, 'color'],
+        circleRadius: 8.0,
       );
-      expect(pointLayer.id, 'places-points');
+      expect(pointProps.circleRadius, 8.0);
     });
 
     test('PlaceModel désérialise un Feature GeoJSON', () {

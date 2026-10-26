@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:qvgestion_mobile/core/config/app_config.dart';
+import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
@@ -14,20 +15,20 @@ import 'package:qvgestion_mobile/core/widgets/sheets/poi_preview_card.dart';
 import 'package:qvgestion_mobile/core/widgets/sheets/route_mode_selector_sheet.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/widgets/auth_modal_sheet.dart';
-import 'package:qvgestion_mobile/core/config/env_config.dart';
+import 'package:qvgestion_mobile/core/config/map_config.dart';
+import 'package:qvgestion_mobile/core/services/map_service.dart';
+import 'package:qvgestion_mobile/core/widgets/modals/about_credits_modal.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/explore_ouaga_drawer.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/faso_category_pills.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/faso_nav_header.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/faso_nav_search_bar.dart';
-import 'package:qvgestion_mobile/features/map/presentation/widgets/interactive_faso_map.dart';
-import 'package:qvgestion_mobile/features/map/presentation/widgets/mapbox_faso_map.dart';
+import 'package:qvgestion_mobile/features/map/presentation/widgets/faso_map.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/weather_traffic_ticker.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/places_search_sheet.dart';
 import 'package:qvgestion_mobile/features/guidance/presentation/providers/guidance_providers.dart';
 import 'package:qvgestion_mobile/features/notifications/presentation/widgets/notifications_sheet.dart';
-import 'package:qvgestion_mobile/features/reports/presentation/widgets/report_details_sheet.dart';
 import 'package:qvgestion_mobile/features/reports/presentation/widgets/report_incident_modal.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 import 'package:qvgestion_mobile/features/routes/presentation/providers/routes_providers.dart';
@@ -55,6 +56,8 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   bool _isSimulationPaused = false;
   LatLng? _vehiclePosition;
   double _vehicleHeading = 0.0;
+
+  LatLng? get vehiclePosition => _vehiclePosition;
 
   @override
   void initState() {
@@ -223,6 +226,41 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     final screenState = ref.watch(mapScreenStateProvider);
     final selectedPlace = ref.watch(selectedPlaceProvider);
     final activeRouteState = ref.watch(activeRouteProvider);
+    final mapConfigAsync = ref.watch(mapConfigProvider);
+    final mapService = ref.watch(mapServiceProvider);
+
+    // Synchronisation de l'itinéraire actif vers MapService
+    ref.listen(activeRouteProvider, (prev, next) {
+      final route = next.value;
+      if (route != null) {
+        mapService.setRoute(route);
+      } else {
+        mapService.clearRoute();
+      }
+    });
+
+    // Synchronisation des lieux à proximité vers MapService
+    ref.listen(nearbyPlacesProvider, (prev, next) {
+      final places = next.value;
+      if (places != null && places.isNotEmpty) {
+        mapService.setPlaces(places);
+      }
+    });
+
+    // Recentrage caméra sur sélection de lieu
+    ref.listen(selectedPlaceProvider, (prev, next) {
+      if (next != null) {
+        mapService.animateCamera(lat: next.latitude, lng: next.longitude, zoom: 15.5);
+      }
+    });
+
+    // Recentrage caméra sur obtention position GPS
+    ref.listen(currentLocationProvider, (prev, next) {
+      if (next.lat != AppConstants.ouagaCenterLatitude ||
+          next.lon != AppConstants.ouagaCenterLongitude) {
+        mapService.animateCamera(lat: next.lat, lng: next.lon, zoom: 15.5);
+      }
+    });
 
     ref.listen<MapScreenState>(mapScreenStateProvider, (previous, next) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -238,57 +276,145 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       });
     });
 
+    final styleUrl = mapConfigAsync.value?.styleLight ?? MapConfig.defaultLiberty;
+    final attributionText = mapConfigAsync.value?.attribution ?? MapConfig.defaultAttribution;
+
     return Scaffold(
       body: Stack(
         children: [
-          // 1. CARTE INTERACTIVE : Mapbox si jeton renseigné, sinon OpenStreetMap
-          if (EnvConfig.mapboxToken.isNotEmpty)
-            MapboxFasoMap(
-              isNavigating: screenState == MapScreenState.activeNavigation,
-              navigationMode: ref.watch(selectedRouteModeProvider),
-              navigationPosition: _vehiclePosition,
-              vehicleHeading: _vehicleHeading,
-              onPlaceSelected: (place) {
+          // 1. CARTE INTERACTIVE UNIFIÉE : MapLibre Native + OpenStreetMap
+          FasoMap(
+            styleUrl: styleUrl,
+            attributionText: attributionText,
+            onStyleReady: (controller) async {
+              mapService.attach(controller);
+              await mapService.setupLayers();
+              final places = ref.read(nearbyPlacesProvider).value ?? [];
+              if (places.isNotEmpty) {
+                await mapService.setPlaces(places);
+              }
+              final route = ref.read(activeRouteProvider).value;
+              if (route != null) {
+                await mapService.setRoute(route);
+              }
+            },
+            onTap: (point, latLng) async {
+              final place = await mapService.queryPlaceAt(point);
+              if (place != null) {
                 ref.read(selectedPlaceProvider.notifier).select(place);
-              },
-              onReportSelected: (report) {
-                ReportDetailsSheet.show(context, report);
-              },
-              onReportTap: () {
-                ReportIncidentModal.show(context);
-              },
-              onToggleLayers: () {
-                AppSnackbar.showInfo(
-                  context,
-                  title: 'Calques cartographiques',
-                  message: 'Bascule entre vue standard et satellite Mapbox',
-                );
-              },
-            )
-          else
-            InteractiveFasoMap(
-              navigationPosition: _vehiclePosition,
-              navigationMode: ref.watch(selectedRouteModeProvider),
-              isNavigating: screenState == MapScreenState.activeNavigation,
-              vehicleHeading: _vehicleHeading,
-              onPlaceSelected: (place) {
-                ref.read(selectedPlaceProvider.notifier).select(place);
-              },
-              onReportSelected: (report) {
-                ReportDetailsSheet.show(context, report);
-              },
-              onReportTap: () {
-                ReportIncidentModal.show(context);
-              },
-              onToggleLayers: () {
-                AppSnackbar.showInfo(
-                  context,
-                  title: 'Calques cartographiques',
-                  message: 'Bascule entre vue standard OpenStreetMap et vue satellite',
-                );
-              },
+              }
+            },
+            onAttributionTap: () {
+              AboutCreditsModal.show(context);
+            },
+          ),
+
+          // 1.1 BADGE FLOTTANT "✅ Hors-ligne prêt"
+          if (screenState != MapScreenState.activeNavigation)
+            Positioned(
+              left: 20,
+              bottom: 300,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(
+                      Icons.check_circle_rounded,
+                      color: Color(0xFF22C55E),
+                      size: 16,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      'Hors-ligne prêt',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF374151),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
 
+          // 1.2 CONTRÔLES FLOTTANTS CARTE (Signalement, Centrage GPS)
+          if (screenState != MapScreenState.activeNavigation)
+            Positioned(
+              right: 16,
+              bottom: 270,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    key: const Key('fab_report_hazard'),
+                    onTap: () => ReportIncidentModal.show(context),
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFFCA5A5), width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFDC2626).withValues(alpha: 0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.campaign_rounded,
+                        color: Color(0xFFDC2626),
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    key: const Key('fab_recenter'),
+                    onTap: () {
+                      final loc = ref.read(currentLocationProvider);
+                      mapService.animateCamera(lat: loc.lat, lng: loc.lon, zoom: 15.5);
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.my_location_rounded,
+                        color: AppColors.primary,
+                        size: 24,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // 2. BANNIÈRE SUPÉRIEURE DE NAVIGATION ACTIVE (Voice Prompt & Commandes)
           if (screenState == MapScreenState.activeNavigation)

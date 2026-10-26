@@ -4,7 +4,7 @@ import 'package:qvgestion_mobile/core/network/api_client.dart';
 import 'package:qvgestion_mobile/core/network/api_endpoints.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 
-/// Service de calcul d'itinéraire optimisé (moteur QvGestion avec fallback Mapbox/Géodésique)
+/// Service de calcul d'itinéraire optimisé (moteur QvGestion avec fallback OSRM/Géodésique)
 class RouteService {
   final ApiClient apiClient;
 

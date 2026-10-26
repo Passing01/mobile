@@ -1,0 +1,375 @@
+import 'dart:math';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
+import 'package:qvgestion_mobile/core/utils/app_logger.dart';
+import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
+import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
+
+/// Interface unifiée cachant le moteur cartographique au reste de l'application
+/// Permet l'interchangeabilité complète du moteur sans impacter les écrans.
+abstract class MapService {
+  void attach(MapLibreMapController controller);
+  bool get isReady;
+  Future<void> setupLayers();
+  Future<void> setPlaces(List<PlaceModel> places);
+  Future<void> setRoute(RouteModel? route);
+  Future<void> clearRoute();
+  Future<void> moveCamera({required double lat, required double lng, double zoom = 14.0});
+  Future<void> animateCamera({
+    required double lat,
+    required double lng,
+    double zoom = 15.0,
+    double? bearing,
+    double? tilt,
+  });
+  Future<void> fitBounds({
+    required double minLat,
+    required double minLon,
+    required double maxLat,
+    required double maxLon,
+    double padding = 50.0,
+  });
+  Future<PlaceModel?> queryPlaceAt(Point<double> point);
+  void dispose();
+}
+
+/// Implémentation officielle basée sur MapLibre Native et OpenStreetMap
+class MapLibreMapService implements MapService {
+  MapLibreMapController? _controller;
+  bool _layersConfigured = false;
+  List<PlaceModel> _cachedPlaces = [];
+  RouteModel? _cachedRoute;
+
+  static const String placesSourceId = 'fasonav-places-source';
+  static const String placesClusterLayerId = 'fasonav-places-clusters';
+  static const String placesClusterCountLayerId = 'fasonav-places-cluster-count';
+  static const String placesPointsLayerId = 'fasonav-places-points';
+
+  static const String routeSourceId = 'fasonav-route-source';
+  static const String routeLayerId = 'fasonav-route-layer';
+
+  @override
+  bool get isReady => _controller != null && _layersConfigured;
+
+  @override
+  void attach(MapLibreMapController controller) {
+    _controller = controller;
+    _layersConfigured = false;
+  }
+
+  @override
+  Future<void> setupLayers() async {
+    final c = _controller;
+    if (c == null) return;
+
+    try {
+      // 1. Initialisation de la source des lieux avec grappes (clustering)
+      final placesGeoJson = _buildPlacesGeoJson(_cachedPlaces);
+      await c.addSource(
+        placesSourceId,
+        GeojsonSourceProperties(
+          data: placesGeoJson,
+          cluster: true,
+          clusterMaxZoom: 14,
+          clusterRadius: 50,
+        ),
+      );
+
+      // Couche des grappes (cercles bleu foncé avec contour blanc)
+      await c.addCircleLayer(
+        placesSourceId,
+        placesClusterLayerId,
+        const CircleLayerProperties(
+          circleColor: '#1E3A5F',
+          circleRadius: 20.0,
+          circleStrokeColor: '#FFFFFF',
+          circleStrokeWidth: 2.5,
+        ),
+        filter: ['has', 'point_count'],
+        enableInteraction: true,
+      );
+
+      // Couche du libellé chiffré au centre de la grappe
+      await c.addSymbolLayer(
+        placesSourceId,
+        placesClusterCountLayerId,
+        const SymbolLayerProperties(
+          textField: [Expressions.get, 'point_count_abbreviated'],
+          textColor: '#FFFFFF',
+          textSize: 12.0,
+        ),
+        filter: ['has', 'point_count'],
+        enableInteraction: false,
+      );
+
+      // Couche des points individuels colorés selon leur catégorie
+      await c.addCircleLayer(
+        placesSourceId,
+        placesPointsLayerId,
+        const CircleLayerProperties(
+          circleColor: [Expressions.get, 'color'],
+          circleRadius: 8.0,
+          circleStrokeColor: '#FFFFFF',
+          circleStrokeWidth: 2.0,
+        ),
+        filter: ['!', ['has', 'point_count']],
+        enableInteraction: true,
+      );
+
+      // 2. Initialisation de la source et couche du tracé d'itinéraire
+      final routeGeoJson = _buildRouteGeoJson(_cachedRoute);
+      await c.addGeoJsonSource(routeSourceId, routeGeoJson);
+
+      await c.addLineLayer(
+        routeSourceId,
+        routeLayerId,
+        const LineLayerProperties(
+          lineColor: '#2563EB',
+          lineWidth: 6.0,
+          lineJoin: 'round',
+          lineCap: 'round',
+        ),
+        enableInteraction: false,
+      );
+
+      _layersConfigured = true;
+      AppLogger.i('Couches MapLibre configurées avec succès');
+    } catch (e) {
+      AppLogger.w('Initialisation couches MapLibre: $e');
+    }
+  }
+
+  @override
+  Future<void> setPlaces(List<PlaceModel> places) async {
+    _cachedPlaces = List.unmodifiable(places);
+    final c = _controller;
+    if (c == null || !_layersConfigured) return;
+
+    try {
+      final geojson = _buildPlacesGeoJson(places);
+      await c.setGeoJsonSource(placesSourceId, geojson);
+    } catch (e) {
+      AppLogger.w('Mise à jour source places MapLibre: $e');
+    }
+  }
+
+  @override
+  Future<void> setRoute(RouteModel? route) async {
+    _cachedRoute = route;
+    final c = _controller;
+    if (c == null || !_layersConfigured) return;
+
+    try {
+      final geojson = _buildRouteGeoJson(route);
+      await c.setGeoJsonSource(routeSourceId, geojson);
+
+      if (route != null && route.boundingBox.length >= 4) {
+        final minLat = route.boundingBox[0];
+        final minLon = route.boundingBox[1];
+        final maxLat = route.boundingBox[2];
+        final maxLon = route.boundingBox[3];
+        if (minLat.isFinite && maxLat.isFinite && minLon.isFinite && maxLon.isFinite) {
+          await fitBounds(
+            minLat: minLat,
+            minLon: minLon,
+            maxLat: maxLat,
+            maxLon: maxLon,
+            padding: 80.0,
+          );
+        }
+      }
+    } catch (e) {
+      AppLogger.w('Mise à jour tracé itinéraire MapLibre: $e');
+    }
+  }
+
+  @override
+  Future<void> clearRoute() async {
+    _cachedRoute = null;
+    final c = _controller;
+    if (c == null || !_layersConfigured) return;
+
+    try {
+      await c.setGeoJsonSource(
+        routeSourceId,
+        const {'type': 'FeatureCollection', 'features': []},
+      );
+    } catch (e) {
+      AppLogger.d('Effacement tracé itinéraire: $e');
+    }
+  }
+
+  @override
+  Future<void> moveCamera({
+    required double lat,
+    required double lng,
+    double zoom = 14.0,
+  }) async {
+    final c = _controller;
+    if (c == null || !lat.isFinite || !lng.isFinite) return;
+
+    try {
+      await c.moveCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(lat, lng),
+            zoom: zoom.clamp(3.0, 20.0),
+          ),
+        ),
+      );
+    } catch (e) {
+      AppLogger.d('Déplacement caméra MapLibre: $e');
+    }
+  }
+
+  @override
+  Future<void> animateCamera({
+    required double lat,
+    required double lng,
+    double zoom = 15.0,
+    double? bearing,
+    double? tilt,
+  }) async {
+    final c = _controller;
+    if (c == null || !lat.isFinite || !lng.isFinite) return;
+
+    try {
+      await c.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(lat, lng),
+            zoom: zoom.clamp(3.0, 20.0),
+            bearing: bearing ?? 0.0,
+            tilt: tilt ?? 0.0,
+          ),
+        ),
+      );
+    } catch (e) {
+      AppLogger.d('Animation caméra MapLibre: $e');
+    }
+  }
+
+  @override
+  Future<void> fitBounds({
+    required double minLat,
+    required double minLon,
+    required double maxLat,
+    required double maxLon,
+    double padding = 50.0,
+  }) async {
+    final c = _controller;
+    if (c == null) return;
+
+    try {
+      await c.animateCamera(
+        CameraUpdate.newLatLngBounds(
+          LatLngBounds(
+            southwest: LatLng(minLat, minLon),
+            northeast: LatLng(maxLat, maxLon),
+          ),
+          left: padding,
+          top: padding,
+          right: padding,
+          bottom: padding,
+        ),
+      );
+    } catch (e) {
+      AppLogger.d('Ajustement vue boîte englobante MapLibre: $e');
+    }
+  }
+
+  @override
+  Future<PlaceModel?> queryPlaceAt(Point<double> point) async {
+    final c = _controller;
+    if (c == null || !_layersConfigured) return null;
+
+    try {
+      final features = await c.queryRenderedFeatures(
+        point,
+        [placesPointsLayerId],
+        null,
+      );
+
+      if (features.isNotEmpty) {
+        final feature = features.first;
+        if (feature is Map) {
+          final props = feature['properties'] as Map?;
+          final geom = feature['geometry'] as Map?;
+          if (props != null && geom != null) {
+            final coords = geom['coordinates'] as List?;
+            final lon = (coords?[0] as num?)?.toDouble() ?? 0.0;
+            final lat = (coords?[1] as num?)?.toDouble() ?? 0.0;
+            final name = props['name']?.toString() ?? 'Lieu sélectionné';
+            final idStr = props['id']?.toString();
+            final parsedId = int.tryParse(idStr ?? '') ?? 999;
+
+            return PlaceModel(
+              id: parsedId,
+              uuid: idStr,
+              nom: name,
+              categorieId: 1,
+              latitude: lat,
+              longitude: lon,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      AppLogger.d('Interrogation entités sous le doigt: $e');
+    }
+    return null;
+  }
+
+  @override
+  void dispose() {
+    _controller = null;
+    _layersConfigured = false;
+  }
+
+  Map<String, dynamic> _buildPlacesGeoJson(List<PlaceModel> places) {
+    return {
+      'type': 'FeatureCollection',
+      'features': places.map((p) => p.toGeoJsonFeature()).toList(),
+    };
+  }
+
+  Map<String, dynamic> _buildRouteGeoJson(RouteModel? route) {
+    if (route == null || route.geometry.length < 2) {
+      return const {
+        'type': 'FeatureCollection',
+        'features': [],
+      };
+    }
+
+    final coords = <List<double>>[];
+    for (final pt in route.geometry) {
+      if (pt.length >= 2 && pt[0].isFinite && pt[1].isFinite) {
+        coords.add([pt[1].toDouble(), pt[0].toDouble()]); // [lng, lat] GeoJSON standard
+      }
+    }
+
+    return {
+      'type': 'FeatureCollection',
+      'features': [
+        {
+          'type': 'Feature',
+          'geometry': {
+            'type': 'LineString',
+            'coordinates': coords,
+          },
+          'properties': {
+            'mode': route.mode,
+            'distance': route.distanceMeters,
+          },
+        },
+      ],
+    };
+  }
+}
+
+/// Provider pour injecter l'instance du MapService
+final mapServiceProvider = Provider<MapService>((ref) {
+  final service = MapLibreMapService();
+  ref.onDispose(() => service.dispose());
+  return service;
+});

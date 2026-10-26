@@ -2,18 +2,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-        maven {
-            url = uri("https://api.mapbox.com/downloads/v2/releases/maven")
-            authentication {
-                create<BasicAuthentication>("basic")
-            }
-            credentials {
-                username = "mapbox"
-                password = providers.gradleProperty("MAPBOX_DOWNLOADS_TOKEN")
-                    .orElse(providers.environmentVariable("MAPBOX_DOWNLOADS_TOKEN"))
-                    .getOrElse("")
-            }
-        }
     }
 }
 
@@ -28,10 +16,39 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 subprojects {
-    if (name == "mapbox_maps_flutter_mobile") {
-        plugins.apply("org.jetbrains.kotlin.android")
-    }
     project.evaluationDependsOn(":app")
+}
+
+subprojects {
+    val configureJava: (Project) -> Unit = { p ->
+        val androidExt = p.extensions.findByName("android")
+        if (androidExt != null) {
+            try {
+                val compileOptions = androidExt.javaClass.getMethod("getCompileOptions").invoke(androidExt)
+                val setSource = compileOptions.javaClass.getMethod("setSourceCompatibility", JavaVersion::class.java)
+                val setTarget = compileOptions.javaClass.getMethod("setTargetCompatibility", JavaVersion::class.java)
+                setSource.invoke(compileOptions, JavaVersion.VERSION_17)
+                setTarget.invoke(compileOptions, JavaVersion.VERSION_17)
+            } catch (e: Throwable) {}
+        }
+        p.tasks.withType<JavaCompile>().configureEach {
+            sourceCompatibility = "17"
+            targetCompatibility = "17"
+        }
+        p.tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+            compilerOptions {
+                jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            }
+        }
+    }
+
+    if (state.executed) {
+        configureJava(this)
+    } else {
+        afterEvaluate {
+            configureJava(this)
+        }
+    }
 }
 
 

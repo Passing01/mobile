@@ -5,17 +5,11 @@ import 'package:qvgestion_mobile/core/config/env_config.dart';
 import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/theme/app_theme.dart';
-
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:qvgestion_mobile/features/navigation/presentation/screens/main_tab_scaffold.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EnvConfig.initializeAsync();
-
-  if (EnvConfig.mapboxToken.isNotEmpty) {
-    MapboxOptions.setAccessToken(EnvConfig.mapboxToken);
-  }
 
   runApp(
     const ProviderScope(

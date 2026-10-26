@@ -129,15 +129,4 @@ class EnvConfig {
 
   /// Intervalle d'envoi de la télémétrie (20 secondes préconisé pour économiser la batterie et éviter la surchauffe)
   static const Duration telemetryInterval = Duration(seconds: 20);
-
-  /// Jeton d'accès public Mapbox (priorité : .env > --dart-define > vide)
-  static String get mapboxToken {
-    if (dotenv.isInitialized) {
-      final fromDotenv = dotenv.maybeGet('MAPBOX_TOKEN');
-      if (fromDotenv != null && fromDotenv.trim().isNotEmpty) {
-        return fromDotenv.trim();
-      }
-    }
-    return const String.fromEnvironment('MAPBOX_TOKEN', defaultValue: '');
-  }
 }

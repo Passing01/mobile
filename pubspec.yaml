@@ -46,7 +46,7 @@ dependencies:
   geolocator: ^14.1.1
   flutter_tts: ^4.2.5
   speech_to_text: ^7.5.0
-  mapbox_maps_flutter: ^3.0.0
+  maplibre_gl: 0.26.2
   permission_handler: ^11.3.1
   turf: ^0.0.14
   audioplayers: ^6.8.1

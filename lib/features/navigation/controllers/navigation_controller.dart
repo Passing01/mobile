@@ -1,38 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart' as geo;
-import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' as mb;
 import 'package:turf/turf.dart' as turf;
 import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
+import 'package:qvgestion_mobile/core/services/map_service.dart';
 import 'package:qvgestion_mobile/core/services/route_service.dart';
 import 'package:qvgestion_mobile/core/services/voice_guide_service.dart';
 import 'package:qvgestion_mobile/core/services/traffic_telemetry_service.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
-
-/// Trace l'itinéraire calculé sur le canvas vectoriel Mapbox sans crash NDK
-Future<void> drawRoute(mb.MapboxMap map, Map<String, dynamic> geometry) async {
-  try {
-    final manager = await map.annotations.createPolylineAnnotationManager(id: 'route_polyline_mgr');
-    await manager.deleteAll();
-    final rawCoords = geometry['coordinates'] as List<dynamic>?;
-    if (rawCoords != null && rawCoords.isNotEmpty) {
-      final positions = rawCoords.map((c) {
-        final list = c as List<dynamic>;
-        return turf.Position((list[0] as num).toDouble(), (list[1] as num).toDouble());
-      }).toList();
-      await manager.create(
-        mb.PolylineAnnotationOptions(
-          geometry: turf.LineString(coordinates: positions),
-          lineColor: 0xFF2563EB,
-          lineWidth: 6.5,
-          lineJoin: mb.LineJoin.ROUND,
-        ),
-      );
-    }
-  } catch (e) {
-    AppLogger.w('Tracé sécurisé Mapbox: $e');
-  }
-}
+import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 
 /// Contrôleur de guidage temps réel conforme au guide technique QvGestion :
 /// - Suivi GPS haute précision
@@ -51,7 +27,7 @@ class NavigationController {
     this.onArrival,
   });
 
-  final mb.MapboxMap map;
+  final MapService map;
   final RouteService routes;
   final VoiceGuide voice;
   final TrafficTelemetryService? telemetry;
@@ -116,7 +92,22 @@ class NavigationController {
     _stepIndex = 0;
     _spoken.clear();
 
-    await drawRoute(map, data['geometry'] as Map<String, dynamic>);
+    final geometryPoints = rawCoords
+        .map((c) => [(c[1] as num).toDouble(), (c[0] as num).toDouble()])
+        .toList();
+
+    final routeModel = RouteModel(
+      mode: 'motorcycle',
+      distanceMeters: (data['distance'] as num?)?.toDouble() ?? 0.0,
+      durationSeconds: (data['duration'] as num?)?.toInt() ?? 0,
+      durationFormatted: '',
+      geometry: geometryPoints,
+      boundingBox: const [],
+      maneuvers: const [],
+      engine: 'osrm',
+    );
+
+    await map.setRoute(routeModel);
     onRouteUpdated?.call(data);
   }
 
@@ -159,14 +150,12 @@ class NavigationController {
 
     // 4. Caméra fluide qui suit le déplacement
     try {
-      await map.easeTo(
-        mb.CameraOptions(
-          center: mb.Point(coordinates: mb.Position(p.longitude, p.latitude)),
-          bearing: p.speed > 1 ? p.heading : null, // Cap fiable en mouvement
-          zoom: 17.0,
-          pitch: 50.0,
-        ),
-        mb.MapAnimationOptions(duration: 800),
+      await map.animateCamera(
+        lat: p.latitude,
+        lng: p.longitude,
+        bearing: p.speed > 1 ? p.heading : null,
+        zoom: 17.0,
+        tilt: 50.0,
       );
     } catch (e) {
       AppLogger.d('Animation caméra de navigation interrompue: $e');

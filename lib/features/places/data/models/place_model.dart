@@ -148,7 +148,7 @@ class PlaceModel extends Equatable {
     );
   }
 
-  /// Convertit récursivement n'importe quel Map (y compris `_Map<Object?, Object?>` de Mapbox)
+  /// Convertit récursivement n'importe quel Map (y compris `_Map<Object?, Object?>` des plugins natifs)
   static Map<String, dynamic> _safeCastMap(dynamic raw) {
     if (raw is! Map) return {};
     final result = <String, dynamic>{};
@@ -164,7 +164,7 @@ class PlaceModel extends Equatable {
     return result;
   }
 
-  /// Constructeur spécialisé depuis un Feature GeoJSON retourné par l'API ou Mapbox
+  /// Constructeur spécialisé depuis un Feature GeoJSON retourné par l'API ou le moteur cartographique
   factory PlaceModel.fromGeoJsonFeature(Map<dynamic, dynamic> rawFeature) {
     final feature = _safeCastMap(rawFeature);
     final geometry = _safeCastMap(feature['geometry']);
@@ -238,7 +238,7 @@ class PlaceModel extends Equatable {
     };
   }
 
-  /// Conversion en Feature GeoJSON pour intégration directe dans la couche Mapbox
+  /// Conversion en Feature GeoJSON pour intégration directe dans la couche cartographique
   Map<String, dynamic> toGeoJsonFeature() {
     return {
       'type': 'Feature',
