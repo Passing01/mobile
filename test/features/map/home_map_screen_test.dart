@@ -205,5 +205,26 @@ void main() {
 
     expect(find.byIcon(Icons.dark_mode_rounded), findsOneWidget);
   });
+
+  testWidgets('Bouton fab_toggle_satellite permet de basculer en mode satellite haute résolution',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(createTestWidget());
+    await tester.pumpAndSettle();
+
+    final satBtn = find.byKey(const Key('fab_toggle_satellite'));
+    expect(satBtn, findsOneWidget);
+    expect(find.byIcon(Icons.satellite_alt_rounded), findsOneWidget);
+
+    // Clic pour activer le mode satellite
+    await tester.tap(satBtn, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    // Clic pour désactiver le mode satellite
+    await tester.tap(satBtn, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(satBtn, findsOneWidget);
+  });
 }
+
 

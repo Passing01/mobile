@@ -5,21 +5,25 @@ import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 class MapConfig {
   final String styleLight;
   final String styleDark;
+  final String styleSatellite;
   final String attribution;
 
   const MapConfig({
     required this.styleLight,
     required this.styleDark,
+    required this.styleSatellite,
     required this.attribution,
   });
 
   static const defaultFasoLight = 'assets/map/styles/faso-light.json';
   static const defaultFasoDark = 'assets/map/styles/faso-dark.json';
-  static const defaultAttribution = '© OpenStreetMap contributors';
+  static const defaultFasoSatellite = 'assets/map/styles/faso-satellite.json';
+  static const defaultAttribution = '© OpenStreetMap contributors, © Esri';
 
   factory MapConfig.defaults() => const MapConfig(
         styleLight: defaultFasoLight,
         styleDark: defaultFasoDark,
+        styleSatellite: defaultFasoSatellite,
         attribution: defaultAttribution,
       );
 
@@ -35,6 +39,7 @@ class MapConfig {
     return MapConfig(
       styleLight: _sanitizeUrl(json['style_light'] as String?, defaultFasoLight),
       styleDark: _sanitizeUrl(json['style_dark'] as String?, defaultFasoDark),
+      styleSatellite: _sanitizeUrl(json['style_satellite'] as String?, defaultFasoSatellite),
       attribution: json['attribution'] as String? ?? defaultAttribution,
     );
   }

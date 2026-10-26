@@ -249,15 +249,17 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       }
     });
 
-    // Recentrage caméra sur sélection de lieu
+    // Synchronisation lieu sélectionné vers MapService (dépose le pin)
     ref.listen(selectedPlaceProvider, (prev, next) {
+      mapService.setSelectedPlace(next);
       if (next != null) {
         mapService.animateCamera(lat: next.latitude, lng: next.longitude, zoom: 15.5);
       }
     });
 
-    // Recentrage caméra sur obtention position GPS
+    // Synchronisation position GPS vers MapService (dépose le repère de position)
     ref.listen(currentLocationProvider, (prev, next) {
+      mapService.updateUserLocation(next.lat, next.lon);
       if (next.lat != AppConstants.ouagaCenterLatitude ||
           next.lon != AppConstants.ouagaCenterLongitude) {
         mapService.animateCamera(lat: next.lat, lng: next.lon, zoom: 15.5);
@@ -278,16 +280,23 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       });
     });
 
+    final isSatellite = ref.watch(isSatelliteModeProvider);
     final themeMode = ref.watch(themeModeProvider);
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
     final isDark = themeMode == ThemeMode.dark ||
         (themeMode == ThemeMode.system && platformBrightness == Brightness.dark);
-    final mapTheme = isDark ? MapTheme.dark : MapTheme.light;
+    final mapTheme = isSatellite
+        ? MapTheme.satellite
+        : (isDark ? MapTheme.dark : MapTheme.light);
 
-    final styleUrl = isDark
-        ? (mapConfigAsync.value?.styleDark ?? MapConfig.defaultFasoDark)
-        : (mapConfigAsync.value?.styleLight ?? MapConfig.defaultFasoLight);
-    final attributionText = mapConfigAsync.value?.attribution ?? MapConfig.defaultAttribution;
+    final styleUrl = isSatellite
+        ? (mapConfigAsync.value?.styleSatellite ?? MapConfig.defaultFasoSatellite)
+        : (isDark
+            ? (mapConfigAsync.value?.styleDark ?? MapConfig.defaultFasoDark)
+            : (mapConfigAsync.value?.styleLight ?? MapConfig.defaultFasoLight));
+    final attributionText = isSatellite
+        ? '© OpenStreetMap contributors, © Esri'
+        : (mapConfigAsync.value?.attribution ?? MapConfig.defaultAttribution);
 
     return Scaffold(
       body: Stack(
@@ -299,6 +308,12 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             onStyleReady: (controller) async {
               mapService.attach(controller);
               await mapService.setupLayers(theme: mapTheme);
+              final loc = ref.read(currentLocationProvider);
+              await mapService.updateUserLocation(loc.lat, loc.lon);
+              final selPlace = ref.read(selectedPlaceProvider);
+              if (selPlace != null) {
+                await mapService.setSelectedPlace(selPlace);
+              }
               final places = ref.read(nearbyPlacesProvider).value ?? [];
               if (places.isNotEmpty) {
                 await mapService.setPlaces(places);
@@ -312,6 +327,17 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               final place = await mapService.queryPlaceAt(point);
               if (place != null) {
                 ref.read(selectedPlaceProvider.notifier).select(place);
+              } else {
+                final tappedPlace = PlaceModel(
+                  id: DateTime.now().millisecondsSinceEpoch,
+                  nom: 'Point repéré',
+                  categorieId: 0,
+                  latitude: latLng.latitude,
+                  longitude: latLng.longitude,
+                  quartier: 'Ouagadougou',
+                  adresse: '${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}',
+                );
+                ref.read(selectedPlaceProvider.notifier).select(tappedPlace);
               }
             },
             onAttributionTap: () {
@@ -394,6 +420,38 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  // Bouton bascule Mode Satellite
+                  GestureDetector(
+                    key: const Key('fab_toggle_satellite'),
+                    onTap: () {
+                      ref.read(isSatelliteModeProvider.notifier).toggle();
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: isSatellite ? AppColors.primary : Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSatellite ? AppColors.primary : const Color(0xFFE5E7EB),
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.satellite_alt_rounded,
+                        color: isSatellite ? Colors.white : const Color(0xFF4B5563),
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   // Bouton bascule Mode Plein Soleil / Nuit
                   GestureDetector(
                     key: const Key('fab_toggle_theme'),
@@ -427,7 +485,8 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                     key: const Key('fab_recenter'),
                     onTap: () {
                       final loc = ref.read(currentLocationProvider);
-                      mapService.animateCamera(lat: loc.lat, lng: loc.lon, zoom: 15.5);
+                      mapService.updateUserLocation(loc.lat, loc.lon);
+                      mapService.animateCamera(lat: loc.lat, lng: loc.lon, zoom: 16.0);
                     },
                     child: Container(
                       width: 48,

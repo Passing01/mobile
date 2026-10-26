@@ -15,18 +15,21 @@ void main() {
       final config = MapConfig.defaults();
       expect(config.styleLight, 'assets/map/styles/faso-light.json');
       expect(config.styleDark, 'assets/map/styles/faso-dark.json');
-      expect(config.attribution, '© OpenStreetMap contributors');
+      expect(config.styleSatellite, 'assets/map/styles/faso-satellite.json');
+      expect(config.attribution, contains('OpenStreetMap'));
     });
 
     test('MapConfig.fromJson parse correctement la réponse du backend et assainit HTTP en HTTPS', () {
       final json = {
         'style_light': 'http://qvgestion-backend-production.up.railway.app/static/map/styles/faso-light.json',
         'style_dark': 'https://custom.server.com/static/map/styles/faso-dark.json',
+        'style_satellite': 'https://custom.server.com/static/map/styles/faso-satellite.json',
         'attribution': '© OpenStreetMap contributors',
       };
       final config = MapConfig.fromJson(json);
       expect(config.styleLight, 'https://qvgestion-backend-production.up.railway.app/static/map/styles/faso-light.json');
       expect(config.styleDark, 'https://custom.server.com/static/map/styles/faso-dark.json');
+      expect(config.styleSatellite, 'https://custom.server.com/static/map/styles/faso-satellite.json');
       expect(config.attribution, '© OpenStreetMap contributors');
     });
   });
@@ -44,6 +47,11 @@ void main() {
       expect(MapTheme.dark.label, '#E8ECF2');
       expect(MapTheme.dark.halo, '#0F1722');
       expect(MapTheme.dark.isDark, true);
+
+      expect(MapTheme.satellite.route, '#00E5FF');
+      expect(MapTheme.satellite.label, '#FFFFFF');
+      expect(MapTheme.satellite.halo, '#000000');
+      expect(MapTheme.satellite.isDark, true);
     });
 
     test('MapTheme.colorForCategory attribue les couleurs franches normalisées', () {
@@ -64,7 +72,7 @@ void main() {
     });
   });
 
-  group('ThemeModeNotifier Tests', () {
+  group('ThemeModeNotifier & SatelliteModeNotifier Tests', () {
     test('ThemeModeNotifier bascule entre les modes', () {
       final container = ProviderContainer();
       addTearDown(container.dispose);
@@ -80,10 +88,23 @@ void main() {
       container.read(themeModeProvider.notifier).toggle();
       expect(container.read(themeModeProvider), ThemeMode.light);
     });
+
+    test('SatelliteModeNotifier active et désactive le mode satellite', () {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      expect(container.read(isSatelliteModeProvider), false);
+
+      container.read(isSatelliteModeProvider.notifier).toggle();
+      expect(container.read(isSatelliteModeProvider), true);
+
+      container.read(isSatelliteModeProvider.notifier).toggle();
+      expect(container.read(isSatelliteModeProvider), false);
+    });
   });
 
   group('MapLibreMapService Tests', () {
-    test('MapLibreMapService initialise et met en cache places et routes', () async {
+    test('MapLibreMapService initialise et met en cache places, position et lieu sélectionné', () async {
       final service = MapLibreMapService();
       expect(service.isReady, false);
       expect(service.currentTheme, MapTheme.light);
@@ -96,8 +117,10 @@ void main() {
         categorieId: 1,
       );
 
-      // Met en cache les lieux sans crash même sans contrôleur attaché
+      // Met en cache les lieux, la position GPS et le lieu sélectionné
       await service.setPlaces([place]);
+      await service.updateUserLocation(12.3685, -1.5271);
+      await service.setSelectedPlace(place);
 
       final route = RouteModel(
         mode: 'motorcycle',

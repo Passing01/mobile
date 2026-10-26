@@ -44,6 +44,15 @@ class MapTheme {
     isDark: true,
   );
 
+  /// Thème Mode Satellite (FASO NAV Satellite)
+  static const satellite = MapTheme(
+    route: '#00E5FF', // Cyan vif haute visibilité sur imagerie
+    routeCasing: '#000000', // Liseré sombre net
+    label: '#FFFFFF',
+    halo: '#000000',
+    isDark: true,
+  );
+
   static MapTheme fromBrightness(Brightness brightness) {
     return brightness == Brightness.dark ? dark : light;
   }

@@ -23,3 +23,16 @@ class ThemeModeNotifier extends Notifier<ThemeMode> {
 
 final themeModeProvider =
     NotifierProvider<ThemeModeNotifier, ThemeMode>(ThemeModeNotifier.new);
+
+/// Notifier pour gérer l'activation du mode satellite haute résolution
+class SatelliteModeNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void toggle() => state = !state;
+  void setSatellite(bool value) => state = value;
+}
+
+final isSatelliteModeProvider =
+    NotifierProvider<SatelliteModeNotifier, bool>(SatelliteModeNotifier.new);
+

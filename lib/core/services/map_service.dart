@@ -32,6 +32,8 @@ abstract class MapService {
     double padding = 50.0,
   });
   Future<PlaceModel?> queryPlaceAt(Point<double> point);
+  Future<void> updateUserLocation(double lat, double lon);
+  Future<void> setSelectedPlace(PlaceModel? place);
   MapTheme get currentTheme;
   void dispose();
 }
@@ -55,6 +57,20 @@ class MapLibreMapService implements MapService {
   static const String routeSourceId = 'fasonav-route-source';
   static const String routeCasingLayerId = 'fasonav-route-casing';
   static const String routeLayerId = 'fasonav-route-layer';
+
+  static const String userLocationSourceId = 'fasonav-user-location-source';
+  static const String userLocationAuraLayerId = 'fasonav-user-location-aura';
+  static const String userLocationRingLayerId = 'fasonav-user-location-ring';
+  static const String userLocationCoreLayerId = 'fasonav-user-location-core';
+
+  static const String selectedPlaceSourceId = 'fasonav-selected-place-source';
+  static const String selectedPlaceAuraLayerId = 'fasonav-selected-place-aura';
+  static const String selectedPlacePinLayerId = 'fasonav-selected-place-pin';
+  static const String selectedPlaceLabelLayerId = 'fasonav-selected-place-label';
+
+  double? _userLat;
+  double? _userLon;
+  PlaceModel? _selectedPlace;
 
   @override
   bool get isReady => _controller != null && _layersConfigured;
@@ -151,6 +167,89 @@ class MapLibreMapService implements MapService {
         enableInteraction: false,
       );
 
+      // 3. Initialisation de la source et couches du lieu sélectionné (repère de destination / pin)
+      final selectedGeoJson = _buildPointGeoJson(
+        _selectedPlace?.latitude,
+        _selectedPlace?.longitude,
+        properties: {'title': _selectedPlace?.nom ?? ''},
+      );
+      await c.addGeoJsonSource(selectedPlaceSourceId, selectedGeoJson);
+
+      await c.addCircleLayer(
+        selectedPlaceSourceId,
+        selectedPlaceAuraLayerId,
+        const CircleLayerProperties(
+          circleColor: '#E53935',
+          circleOpacity: 0.25,
+          circleRadius: 22.0,
+        ),
+        enableInteraction: false,
+      );
+
+      await c.addCircleLayer(
+        selectedPlaceSourceId,
+        selectedPlacePinLayerId,
+        const CircleLayerProperties(
+          circleColor: '#E53935',
+          circleRadius: 10.0,
+          circleStrokeColor: '#FFFFFF',
+          circleStrokeWidth: 3.0,
+        ),
+        enableInteraction: false,
+      );
+
+      await c.addSymbolLayer(
+        selectedPlaceSourceId,
+        selectedPlaceLabelLayerId,
+        SymbolLayerProperties(
+          textField: [Expressions.get, 'title'],
+          textFont: const ['Noto Sans Bold'],
+          textSize: 12.0,
+          textColor: theme.label,
+          textHaloColor: theme.halo,
+          textHaloWidth: 2.0,
+          textOffset: const [0, -2.0],
+        ),
+        enableInteraction: false,
+      );
+
+      // 4. Initialisation de la source et couches de la position de l'utilisateur (GPS Puck)
+      final userGeoJson = _buildPointGeoJson(_userLat, _userLon, properties: {'title': 'Ma position'});
+      await c.addGeoJsonSource(userLocationSourceId, userGeoJson);
+
+      await c.addCircleLayer(
+        userLocationSourceId,
+        userLocationAuraLayerId,
+        const CircleLayerProperties(
+          circleColor: '#1A73E8',
+          circleOpacity: 0.20,
+          circleRadius: 18.0,
+        ),
+        enableInteraction: false,
+      );
+
+      await c.addCircleLayer(
+        userLocationSourceId,
+        userLocationRingLayerId,
+        const CircleLayerProperties(
+          circleColor: '#FFFFFF',
+          circleRadius: 8.5,
+          circleStrokeColor: '#1A73E8',
+          circleStrokeWidth: 1.5,
+        ),
+        enableInteraction: false,
+      );
+
+      await c.addCircleLayer(
+        userLocationSourceId,
+        userLocationCoreLayerId,
+        const CircleLayerProperties(
+          circleColor: '#1A73E8',
+          circleRadius: 5.5,
+        ),
+        enableInteraction: false,
+      );
+
       _layersConfigured = true;
       AppLogger.i('Couches MapLibre configurées avec succès (Thème: ${theme.isDark ? "Dark" : "Light"})');
     } catch (e) {
@@ -215,6 +314,39 @@ class MapLibreMapService implements MapService {
       );
     } catch (e) {
       AppLogger.d('Effacement tracé itinéraire: $e');
+    }
+  }
+
+  @override
+  Future<void> updateUserLocation(double lat, double lon) async {
+    _userLat = lat;
+    _userLon = lon;
+    final c = _controller;
+    if (c == null || !_layersConfigured) return;
+
+    try {
+      final geojson = _buildPointGeoJson(lat, lon, properties: {'title': 'Ma position'});
+      await c.setGeoJsonSource(userLocationSourceId, geojson);
+    } catch (e) {
+      AppLogger.d('Mise à jour position utilisateur: $e');
+    }
+  }
+
+  @override
+  Future<void> setSelectedPlace(PlaceModel? place) async {
+    _selectedPlace = place;
+    final c = _controller;
+    if (c == null || !_layersConfigured) return;
+
+    try {
+      final geojson = _buildPointGeoJson(
+        place?.latitude,
+        place?.longitude,
+        properties: {'title': place?.nom ?? ''},
+      );
+      await c.setGeoJsonSource(selectedPlaceSourceId, geojson);
+    } catch (e) {
+      AppLogger.d('Mise à jour lieu sélectionné: $e');
     }
   }
 
@@ -388,6 +520,28 @@ class MapLibreMapService implements MapService {
             'distance': route.distanceMeters,
           },
         },
+      ],
+    };
+  }
+
+  Map<String, dynamic> _buildPointGeoJson(double? lat, double? lon, {Map<String, dynamic>? properties}) {
+    if (lat == null || lon == null || !lat.isFinite || !lon.isFinite) {
+      return const {
+        'type': 'FeatureCollection',
+        'features': [],
+      };
+    }
+    return {
+      'type': 'FeatureCollection',
+      'features': [
+        {
+          'type': 'Feature',
+          'geometry': {
+            'type': 'Point',
+            'coordinates': [lon, lat],
+          },
+          'properties': properties ?? {},
+        }
       ],
     };
   }

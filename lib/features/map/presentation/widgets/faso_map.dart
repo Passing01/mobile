@@ -106,7 +106,9 @@ class _FasoMapState extends State<FasoMap> {
               zoom: 12.5,
             ),
             compassEnabled: true,
-            myLocationEnabled: false, // Activé ultérieurement à l'étape 6
+            myLocationEnabled: true,
+            myLocationRenderMode: MyLocationRenderMode.normal,
+            myLocationTrackingMode: MyLocationTrackingMode.none,
             trackCameraPosition: true,
             onMapCreated: (c) {
               _c = c;
