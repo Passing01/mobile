@@ -89,8 +89,134 @@ class PlacesRepository {
     }
   }
 
+  static const String _categoryCachePrefix = 'qv_offline_cat_';
+
+  Future<void> _persistFeaturesToCategoryCache(List<dynamic> features) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final byCategory = <String, List<Map<String, dynamic>>>{};
+
+      for (final f in features) {
+        if (f is Map) {
+          final props = f['properties'] as Map?;
+          final cat = props?['category_slug']?.toString() ??
+              props?['category']?.toString() ??
+              props?['categorie_slug']?.toString();
+          if (cat != null && cat.isNotEmpty) {
+            byCategory.putIfAbsent(cat, () => []).add(Map<String, dynamic>.from(f));
+          }
+        }
+      }
+
+      for (final entry in byCategory.entries) {
+        final key = '$_categoryCachePrefix${entry.key}';
+        final existingRaw = prefs.getString(key);
+        final existingFeatures = <dynamic, Map<String, dynamic>>{};
+        if (existingRaw != null) {
+          try {
+            final decoded = jsonDecode(existingRaw) as List<dynamic>;
+            for (final item in decoded) {
+              if (item is Map) {
+                final id = item['id'] ?? item['properties']?['id'];
+                if (id != null) existingFeatures[id] = Map<String, dynamic>.from(item);
+              }
+            }
+          } catch (_) {}
+        }
+        for (final item in entry.value) {
+          final id = item['id'] ?? item['properties']?['id'];
+          if (id != null) existingFeatures[id] = item;
+        }
+        await prefs.setString(key, jsonEncode(existingFeatures.values.toList()));
+      }
+    } catch (e) {
+      AppLogger.w('Erreur persistance cache catégories hors-ligne: $e');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _getOfflineFeaturesForCategories(
+    List<String> categories, {
+    String? bbox,
+  }) async {
+    final results = <Map<String, dynamic>>[];
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final cat in categories) {
+        final key = '$_categoryCachePrefix$cat';
+        final raw = prefs.getString(key);
+        if (raw != null) {
+          try {
+            final list = jsonDecode(raw) as List<dynamic>;
+            for (final item in list) {
+              if (item is Map) {
+                results.add(Map<String, dynamic>.from(item));
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      AppLogger.w('Erreur lecture cache catégories hors-ligne: $e');
+    }
+
+    if (results.isEmpty) {
+      return _buildLocalFallbackFeatures(categories);
+    }
+
+    // Filtrage par BoundingBox si présent
+    if (bbox != null) {
+      try {
+        final parts = bbox.split(',').map((s) => double.tryParse(s.trim())).toList();
+        if (parts.length == 4 && parts.every((p) => p != null)) {
+          final minLon = parts[0]!;
+          final minLat = parts[1]!;
+          final maxLon = parts[2]!;
+          final maxLat = parts[3]!;
+          final inBbox = results.where((f) {
+            final geom = f['geometry'] as Map?;
+            final coords = geom?['coordinates'] as List?;
+            if (coords != null && coords.length >= 2) {
+              final lon = (coords[0] as num).toDouble();
+              final lat = (coords[1] as num).toDouble();
+              return lon >= minLon && lon <= maxLon && lat >= minLat && lat <= maxLat;
+            }
+            return true;
+          }).toList();
+          if (inBbox.isNotEmpty) {
+            return inBbox;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return results;
+  }
+
+  /// Pré-télécharge et enregistre en mémoire hors-ligne les lieux des catégories données
+  Future<int> downloadPlacesForOffline(List<String> categories) async {
+    int total = 0;
+    for (final cat in categories) {
+      try {
+        final res = await apiClient.get<dynamic>(
+          ApiEndpoints.places,
+          queryParameters: {'categories': cat, 'limit': 1000},
+        );
+        final data = res.data;
+        if (data is Map && data['features'] is List) {
+          final features = data['features'] as List;
+          await _persistFeaturesToCategoryCache(features);
+          total += features.length;
+        }
+      } catch (e) {
+        AppLogger.w('Pré-téléchargement catégorie $cat échoué: $e');
+      }
+    }
+    return total;
+  }
+
   /// Récupère les lieux filtrés par catégories, bbox, zone ou near en GeoJSON (FeatureCollection)
-  /// Conforme à la spécification FASO NAV: GET /api/v1/places?categories=...&bbox=...
+  /// En ligne : interroge l'API et met à jour le cache local hors-ligne
+  /// Hors-ligne : charge instantanément depuis le stockage local sans bloquer
   Future<Map<String, dynamic>> getPlacesGeoJson({
     required List<String> categories,
     String? bbox,
@@ -127,56 +253,43 @@ class PlacesRepository {
       if (data is Map && data['type'] == 'FeatureCollection') {
         final features = (data['features'] as List<dynamic>?) ?? [];
         if (features.isNotEmpty) {
+          // Persistance locale automatique par catégorie
+          await _persistFeaturesToCategoryCache(features);
+
           try {
             final prefs = await SharedPreferences.getInstance();
             await prefs.setString(cacheKey, jsonEncode(data));
           } catch (e) {
             AppLogger.w('Impossible de mettre en cache les lieux: $e');
           }
-          final map = <String, dynamic>{};
+          final map = <String, dynamic>{'is_offline': false};
           data.forEach((k, v) => map[k.toString()] = v);
           return map;
         }
       }
 
-      // Si l'API retourne 0 points dans cette zone, injecter les repères locaux uniquement en mode test
-      if (AppConfig.testMode) {
-        final localFeatures = _buildLocalFallbackFeatures(categories);
-        if (localFeatures.isNotEmpty) {
-          return {
-            'type': 'FeatureCollection',
-            'features': localFeatures,
-          };
-        }
-      }
-      return {'type': 'FeatureCollection', 'features': []};
-    } catch (e, st) {
-      AppErrorReporter.reportError(
-        'Erreur GeoJSON lieux API',
-        error: e,
-        stackTrace: st,
-        tag: 'PlacesAPI',
-      );
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final raw = prefs.getString(cacheKey);
-        if (raw != null) {
-          final decoded = jsonDecode(raw) as Map<String, dynamic>;
-          if (decoded['features'] is List && (decoded['features'] as List).isNotEmpty) {
-            return decoded;
-          }
-        }
-      } catch (cacheErr) {
-        AppLogger.w('Lecture cache GeoJSON impossible: $cacheErr');
-      }
-
-      if (AppConfig.testMode) {
+      // Si l'API retourne 0 points dans cette boîte, tenter de charger les points hors-ligne enregistrés
+      final offlineFeatures = await _getOfflineFeaturesForCategories(categories, bbox: bbox);
+      if (offlineFeatures.isNotEmpty) {
         return {
           'type': 'FeatureCollection',
-          'features': _buildLocalFallbackFeatures(categories),
+          'features': offlineFeatures,
+          'meta': {'count': offlineFeatures.length, 'truncated': false},
+          'is_offline': true,
         };
       }
-      return {'type': 'FeatureCollection', 'features': []};
+
+      return {'type': 'FeatureCollection', 'features': [], 'is_offline': false};
+    } catch (e) {
+      AppLogger.i('Mode hors-ligne actif pour les lieux: $e');
+      // En cas de panne de connexion ou mode hors-ligne : utilisation directe du cache téléchargé
+      final offlineFeatures = await _getOfflineFeaturesForCategories(categories, bbox: bbox);
+      return {
+        'type': 'FeatureCollection',
+        'features': offlineFeatures,
+        'meta': {'count': offlineFeatures.length, 'truncated': false},
+        'is_offline': true,
+      };
     }
   }
 

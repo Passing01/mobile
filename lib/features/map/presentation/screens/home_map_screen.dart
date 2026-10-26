@@ -41,7 +41,6 @@ import 'package:qvgestion_mobile/features/traffic/presentation/widgets/active_tr
 import 'package:qvgestion_mobile/features/traffic/presentation/widgets/share_trip_sheet.dart';
 import 'package:dio/dio.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
-import 'package:qvgestion_mobile/core/di/core_providers.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/places_list_bottom_sheet.dart';
 
@@ -77,6 +76,17 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(authNotifierProvider.notifier).checkAuthStatus();
       ref.read(currentLocationProvider.notifier).fetchRealDeviceLocation();
+      // Téléchargement automatique en arrière-plan des lieux réels OSM pour accès hors-ligne instantané
+      ref.read(placesRepositoryProvider).downloadPlacesForOffline([
+        'pharmacie',
+        'station-service',
+        'maquis-restaurant',
+        'hopital-sante',
+        'banque-distributeur',
+        'administration',
+        'ecole-universite',
+        'marche-commerce',
+      ]);
     });
   }
 
@@ -116,65 +126,54 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
 
       ref.read(placesStateProvider.notifier).setLoading();
 
-      final apiClient = ref.read(apiClientProvider);
-      final res = await apiClient.dio.get<Map<String, dynamic>>(
-        '/places/',
-        cancelToken: _placesCancelToken,
-        queryParameters: {
-          'categories': cats.join(','),
-          'bbox': bbox,
-          'zoom': zoom,
-        },
+      final repo = ref.read(placesRepositoryProvider);
+      final data = await repo.getPlacesGeoJson(
+        categories: cats.toList(),
+        bbox: bbox,
+        zoom: zoom,
+        limit: 800,
       );
 
-      final data = res.data;
-      if (data != null && data['features'] is List) {
-        final features = data['features'] as List;
-        final n = features.length;
-        final meta = data['meta'] as Map<String, dynamic>?;
-        final truncated = meta?['truncated'] == true;
+      final features = (data['features'] as List<dynamic>?) ?? [];
+      final n = features.length;
+      final meta = data['meta'] as Map<String, dynamic>?;
+      final truncated = meta?['truncated'] == true;
+      final isOffline = data['is_offline'] == true;
 
-        AppLogger.i('[PLACES] GET categories=${cats.join(',')} bbox=$bbox -> $n lieux, tronqué=$truncated');
-        debugPrint('[PLACES] GET categories=${cats.join(',')} bbox=$bbox -> $n lieux, tronqué=$truncated');
-        DebugInfo.instance.setLastApiError(null);
+      AppLogger.i('[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline)');
+      debugPrint('[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline)');
+      DebugInfo.instance.setLastApiError(null);
 
-        await mapService.showPlaces(data);
+      await mapService.showPlaces(data);
 
-        final placesList = <PlaceModel>[];
-        for (final f in features) {
-          if (f is Map) {
-            try {
-              placesList.add(PlaceModel.fromGeoJsonFeature(Map<dynamic, dynamic>.from(f)));
-            } catch (_) {}
-          }
+      final placesList = <PlaceModel>[];
+      for (final f in features) {
+        if (f is Map) {
+          try {
+            placesList.add(PlaceModel.fromGeoJsonFeature(Map<dynamic, dynamic>.from(f)));
+          } catch (_) {}
         }
-
-        String? catLabel;
-        final allCats = ref.read(categoriesProvider).value ?? [];
-        if (cats.length == 1) {
-          final singleSlug = cats.first;
-          final foundCat = allCats.cast<CategoryModel?>().firstWhere(
-                (cat) => cat?.slug == singleSlug,
-                orElse: () => null,
-              );
-          catLabel = foundCat?.nom ?? singleSlug;
-        }
-
-        ref.read(placesStateProvider.notifier).setOk(
-          count: n,
-          geoJson: data,
-          places: placesList,
-          categoryLabel: catLabel,
-          truncated: truncated,
-        );
       }
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) return;
-      final msg = e.message ?? 'Erreur réseau';
-      AppLogger.e('[PLACES] erreur $msg');
-      debugPrint('[PLACES] erreur $msg');
-      DebugInfo.instance.setLastApiError(msg);
-      ref.read(placesStateProvider.notifier).setError(msg);
+
+      String? catLabel;
+      final allCats = ref.read(categoriesProvider).value ?? [];
+      if (cats.length == 1) {
+        final singleSlug = cats.first;
+        final foundCat = allCats.cast<CategoryModel?>().firstWhere(
+              (cat) => cat?.slug == singleSlug,
+              orElse: () => null,
+            );
+        catLabel = foundCat?.nom ?? singleSlug;
+      }
+
+      ref.read(placesStateProvider.notifier).setOk(
+        count: n,
+        geoJson: data,
+        places: placesList,
+        categoryLabel: catLabel,
+        truncated: truncated,
+        isOffline: isOffline,
+      );
     } catch (e) {
       final msg = e.toString();
       AppLogger.e('[PLACES] erreur $msg');
@@ -474,7 +473,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             },
           ),
 
-          // 1.1 BADGE FLOTTANT "✅ Hors-ligne prêt"
+          // 1.1 BADGE FLOTTANT "Hors-ligne prêt" ou "Mode hors-ligne" dynamique
           if (screenState != MapScreenState.activeNavigation)
             Positioned(
               left: 20,
@@ -482,12 +481,14 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: placesState.isOffline ? const Color(0xFF0F172A) : Colors.white,
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  border: Border.all(
+                    color: placesState.isOffline ? const Color(0xFF38BDF8) : const Color(0xFFE5E7EB),
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
+                      color: Colors.black.withValues(alpha: 0.10),
                       blurRadius: 10,
                       offset: const Offset(0, 3),
                     ),
@@ -495,19 +496,21 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
+                  children: [
                     Icon(
-                      Icons.check_circle_rounded,
-                      color: Color(0xFF22C55E),
+                      placesState.isOffline ? Icons.cloud_off_rounded : Icons.check_circle_rounded,
+                      color: placesState.isOffline ? const Color(0xFF38BDF8) : const Color(0xFF22C55E),
                       size: 16,
                     ),
-                    SizedBox(width: 6),
+                    const SizedBox(width: 6),
                     Text(
-                      'Hors-ligne prêt',
+                      placesState.isOffline
+                          ? 'Hors-ligne (${placesState.count} lieux)'
+                          : 'Hors-ligne prêt',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF374151),
+                        color: placesState.isOffline ? Colors.white : const Color(0xFF374151),
                       ),
                     ),
                   ],

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:qvgestion_mobile/core/theme/map_theme.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
+import 'package:qvgestion_mobile/core/utils/map_pin_generator.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 
@@ -147,30 +148,50 @@ class MapLibreMapService implements MapService {
         enableInteraction: false,
       );
 
-      // Couche des points individuels colorés selon leur catégorie (gros points avec contour blanc)
-      await c.addCircleLayer(
-        placesSourceId,
-        placesPointsLayerId,
-        MapTheme.placeCircleProperties,
-        filter: ['!', [Expressions.has, 'point_count']],
-        enableInteraction: true,
-      );
+      // Enregistrement des icônes pins officielles de FASO NAV
+      try {
+        final allPins = await MapPinGenerator.generateAllPins();
+        for (final entry in allPins.entries) {
+          await c.addImage(entry.key, entry.value);
+        }
+      } catch (e) {
+        AppLogger.w('Enregistrement des icônes pins: $e');
+      }
 
-      // Couche des étiquettes des lieux à partir du zoom 14
+      // Couche des lieux : icône Maps de catégorie avec push/badge en haut affichant le nom
       await c.addSymbolLayer(
         placesSourceId,
-        placesLabelsLayerId,
+        placesPointsLayerId,
         const SymbolLayerProperties(
+          iconImage: [
+            Expressions.match,
+            [Expressions.coalesce, [Expressions.get, 'category_slug'], [Expressions.get, 'category'], ''],
+            'pharmacie', 'pin-pharmacie',
+            'station-service', 'pin-station-service',
+            'maquis-restaurant', 'pin-maquis-restaurant',
+            'hopital-sante', 'pin-hopital-sante',
+            'banque-distributeur', 'pin-banque-distributeur',
+            'administration', 'pin-administration',
+            'ecole-universite', 'pin-ecole-universite',
+            'marche-commerce', 'pin-marche-commerce',
+            'pin-default',
+          ],
+          iconSize: 0.70,
+          iconAnchor: 'bottom',
+          iconAllowOverlap: true,
           textField: [Expressions.get, 'name'],
-          textSize: 12.0,
-          textOffset: [0, 1.6],
-          textColor: '#2B2A27',
+          textSize: 11.5,
+          textColor: '#0F172A',
           textHaloColor: '#FFFFFF',
-          textHaloWidth: 1.5,
+          textHaloWidth: 2.2,
+          textAnchor: 'bottom',
+          textOffset: [0, -3.2],
+          textFont: ['Noto Sans Bold'],
+          textAllowOverlap: false,
+          textOptional: true,
         ),
         filter: ['!', [Expressions.has, 'point_count']],
-        minzoom: 14.0,
-        enableInteraction: false,
+        enableInteraction: true,
       );
 
       // 2. Initialisation de la source et des couches de tracé d'itinéraire (liseré de contraste + intérieur)
@@ -477,11 +498,11 @@ class MapLibreMapService implements MapService {
     if (c == null || !_layersConfigured) return null;
 
     try {
-      // Boîte tactile d'au moins 48px autour du doigt pour un confort optimal en extérieur
+      // Boîte tactile confortable autour du doigt pour attraper le pin ou son badge
       final touchBox = Rect.fromCenter(
         center: Offset(point.x, point.y),
-        width: 48.0,
-        height: 48.0,
+        width: 60.0,
+        height: 72.0,
       );
 
       final features = await c.queryRenderedFeaturesInRect(

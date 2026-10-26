@@ -105,6 +105,7 @@ class PlacesState extends Equatable {
   final bool hasError;
   final bool isZero;
   final bool truncated;
+  final bool isOffline;
   final Map<String, dynamic> lastGeoJson;
   final List<PlaceModel> placesList;
 
@@ -116,6 +117,7 @@ class PlacesState extends Equatable {
     this.hasError = false,
     this.isZero = false,
     this.truncated = false,
+    this.isOffline = false,
     this.lastGeoJson = const {'type': 'FeatureCollection', 'features': []},
     this.placesList = const [],
   });
@@ -128,6 +130,7 @@ class PlacesState extends Equatable {
     required List<PlaceModel> places,
     String? categoryLabel,
     bool truncated = false,
+    bool isOffline = false,
   }) =>
       PlacesState(
         isLoading: false,
@@ -135,6 +138,7 @@ class PlacesState extends Equatable {
         isZero: count == 0,
         hasError: false,
         truncated: truncated,
+        isOffline: isOffline,
         lastGeoJson: geoJson,
         placesList: places,
         categoryLabel: categoryLabel,
@@ -147,6 +151,7 @@ class PlacesState extends Equatable {
     int previousCount = 0,
     String? categoryLabel,
     bool truncated = false,
+    bool isOffline = false,
   }) =>
       PlacesState(
         isLoading: false,
@@ -155,6 +160,7 @@ class PlacesState extends Equatable {
         hasError: true,
         isZero: false,
         truncated: truncated,
+        isOffline: isOffline,
         lastGeoJson: previousGeoJson,
         placesList: previousPlaces,
         categoryLabel: categoryLabel,
@@ -166,11 +172,13 @@ class PlacesState extends Equatable {
     int previousCount = 0,
     String? categoryLabel,
     bool truncated = false,
+    bool isOffline = false,
   }) =>
       PlacesState(
         isLoading: true,
         count: previousCount,
         truncated: truncated,
+        isOffline: isOffline,
         lastGeoJson: previousGeoJson,
         placesList: previousPlaces,
         categoryLabel: categoryLabel,
@@ -185,6 +193,7 @@ class PlacesState extends Equatable {
         hasError,
         isZero,
         truncated,
+        isOffline,
         lastGeoJson,
         placesList,
       ];
@@ -201,6 +210,7 @@ class PlacesNotifier extends Notifier<PlacesState> {
       previousCount: state.count,
       categoryLabel: state.categoryLabel,
       truncated: state.truncated,
+      isOffline: state.isOffline,
     );
   }
 
@@ -210,6 +220,7 @@ class PlacesNotifier extends Notifier<PlacesState> {
     required List<PlaceModel> places,
     String? categoryLabel,
     bool truncated = false,
+    bool isOffline = false,
   }) {
     state = PlacesState.ok(
       count: count,
@@ -217,6 +228,7 @@ class PlacesNotifier extends Notifier<PlacesState> {
       places: places,
       categoryLabel: categoryLabel,
       truncated: truncated,
+      isOffline: isOffline,
     );
   }
 
@@ -228,6 +240,7 @@ class PlacesNotifier extends Notifier<PlacesState> {
       previousCount: state.count,
       categoryLabel: state.categoryLabel,
       truncated: state.truncated,
+      isOffline: state.isOffline,
     );
   }
 
