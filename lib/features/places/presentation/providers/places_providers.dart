@@ -908,3 +908,9 @@ class SearchActiveNotifier extends Notifier<bool> {
 
 final searchActiveProvider =
     NotifierProvider<SearchActiveNotifier, bool>(SearchActiveNotifier.new);
+
+/// Provider pour charger la fiche détaillée d'un lieu par son identifiant
+final placeDetailProvider = FutureProvider.family<PlaceModel, String>((ref, placeId) async {
+  final repository = ref.watch(placesRepositoryProvider);
+  return repository.getPlaceDetail(placeId);
+});

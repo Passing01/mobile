@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,6 +37,12 @@ abstract class MapService {
     double padding = 50.0,
   });
   Future<PlaceModel?> queryPlaceAt(Point<double> point);
+  Future<List<Map<String, dynamic>>> queryTapFeatures(Point<double> point);
+  Future<void> highlightFeature(Map<String, dynamic> feature);
+  Future<void> clearHighlight();
+  Future<void> dropDestinationPin(LatLng geo);
+  Future<void> clearDestinationPin();
+  Future<void> zoomIn(LatLng geo, {double delta = 2.0});
   Future<void> updateUserLocation(double lat, double lon);
   Future<void> setSelectedPlace(PlaceModel? place);
   MapTheme get currentTheme;
@@ -79,6 +86,14 @@ class MapLibreMapService implements MapService {
   static const String selectedPlaceAuraLayerId = 'fasonav-selected-place-aura';
   static const String selectedPlacePinLayerId = 'fasonav-selected-place-pin';
   static const String selectedPlaceLabelLayerId = 'fasonav-selected-place-label';
+
+  // Couches officielles Étape 5 (Halo et Destination libre)
+  static const String selectedSourceId = 'selected';
+  static const String selectedRingLayerId = 'selected-ring';
+  static const String destinationPinSourceId = 'destination-pin';
+  static const String destinationPinAuraLayerId = 'destination-pin-aura';
+  static const String destinationPinLayerId = 'destination-pin-layer';
+  static const String destinationPinLabelLayerId = 'destination-pin-label';
 
   double? _userLat;
   double? _userLon;
@@ -192,6 +207,60 @@ class MapLibreMapService implements MapService {
         ),
         filter: ['!', [Expressions.has, 'point_count']],
         enableInteraction: true,
+      );
+
+      // Couche du halo de sélection (conforme Étape 5 : rayon 22, transparent centre, blanc 4px sous places-points)
+      await c.addGeoJsonSource(selectedSourceId, const {'type': 'FeatureCollection', 'features': []});
+      await c.addCircleLayer(
+        selectedSourceId,
+        selectedRingLayerId,
+        const CircleLayerProperties(
+          circleRadius: 22.0,
+          circleColor: '#00000000',
+          circleStrokeColor: '#FFFFFF',
+          circleStrokeWidth: 4.0,
+        ),
+        belowLayerId: placesPointsLayerId,
+        enableInteraction: false,
+      );
+
+      // Source et couches de l'épingle « Destination » (appui long libre avec confirmation)
+      await c.addGeoJsonSource(destinationPinSourceId, const {'type': 'FeatureCollection', 'features': []});
+      await c.addCircleLayer(
+        destinationPinSourceId,
+        destinationPinAuraLayerId,
+        const CircleLayerProperties(
+          circleColor: '#E53935',
+          circleOpacity: 0.25,
+          circleRadius: 22.0,
+        ),
+        enableInteraction: false,
+      );
+      await c.addCircleLayer(
+        destinationPinSourceId,
+        destinationPinLayerId,
+        const CircleLayerProperties(
+          circleColor: '#E53935',
+          circleRadius: 10.0,
+          circleStrokeColor: '#FFFFFF',
+          circleStrokeWidth: 3.0,
+        ),
+        enableInteraction: false,
+      );
+      await c.addSymbolLayer(
+        destinationPinSourceId,
+        destinationPinLabelLayerId,
+        const SymbolLayerProperties(
+          textField: 'Destination',
+          textFont: ['Noto Sans Bold'],
+          textSize: 12.0,
+          textColor: '#FFFFFF',
+          textHaloColor: '#E53935',
+          textHaloWidth: 2.0,
+          textOffset: [0, -2.4],
+          textAnchor: 'bottom',
+        ),
+        enableInteraction: false,
       );
 
       // 2. Initialisation de la source et des couches de tracé d'itinéraire (liseré de contraste + intérieur)
@@ -539,6 +608,119 @@ class MapLibreMapService implements MapService {
       AppLogger.d('Interrogation entités sous le doigt: $e');
     }
     return null;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> queryTapFeatures(Point<double> point) async {
+    final c = _controller;
+    if (c == null || !_layersConfigured) return [];
+
+    try {
+      final rect = Rect.fromCenter(
+        center: Offset(point.x, point.y),
+        width: 48.0,
+        height: 48.0,
+      );
+
+      final raw = await c.queryRenderedFeaturesInRect(
+        rect,
+        [placesPointsLayerId, placesClusterLayerId],
+        null,
+      );
+
+      final feats = <Map<String, dynamic>>[];
+      for (final e in raw) {
+        if (e is String) {
+          try {
+            feats.add(Map<String, dynamic>.from(jsonDecode(e) as Map));
+          } catch (_) {}
+        } else if (e is Map) {
+          feats.add(Map<String, dynamic>.from(e));
+        }
+      }
+      return feats;
+    } catch (e) {
+      AppLogger.d('Erreur queryTapFeatures: $e');
+      return [];
+    }
+  }
+
+  @override
+  Future<void> highlightFeature(Map<String, dynamic> feature) async {
+    final c = _controller;
+    if (c == null || !_layersConfigured) return;
+    try {
+      await c.setGeoJsonSource(selectedSourceId, {
+        'type': 'FeatureCollection',
+        'features': [feature],
+      });
+    } catch (e) {
+      AppLogger.w('Erreur highlightFeature: $e');
+    }
+  }
+
+  @override
+  Future<void> clearHighlight() async {
+    final c = _controller;
+    if (c == null || !_layersConfigured) return;
+    try {
+      await c.setGeoJsonSource(selectedSourceId, const {
+        'type': 'FeatureCollection',
+        'features': [],
+      });
+    } catch (e) {
+      AppLogger.d('Erreur clearHighlight: $e');
+    }
+  }
+
+  @override
+  Future<void> dropDestinationPin(LatLng geo) async {
+    final c = _controller;
+    if (c == null || !_layersConfigured) return;
+    try {
+      await c.setGeoJsonSource(destinationPinSourceId, {
+        'type': 'FeatureCollection',
+        'features': [
+          {
+            'type': 'Feature',
+            'geometry': {
+              'type': 'Point',
+              'coordinates': [geo.longitude, geo.latitude],
+            },
+            'properties': {'title': 'Destination'},
+          }
+        ],
+      });
+    } catch (e) {
+      AppLogger.w('Erreur dropDestinationPin: $e');
+    }
+  }
+
+  @override
+  Future<void> clearDestinationPin() async {
+    final c = _controller;
+    if (c == null || !_layersConfigured) return;
+    try {
+      await c.setGeoJsonSource(destinationPinSourceId, const {
+        'type': 'FeatureCollection',
+        'features': [],
+      });
+    } catch (e) {
+      AppLogger.d('Erreur clearDestinationPin: $e');
+    }
+  }
+
+  @override
+  Future<void> zoomIn(LatLng geo, {double delta = 2.0}) async {
+    final c = _controller;
+    if (c == null) return;
+    try {
+      final z = c.cameraPosition?.zoom ?? 12.5;
+      final targetZoom = (z + delta).clamp(3.0, 20.0);
+      await c.animateCamera(CameraUpdate.newLatLngZoom(geo, targetZoom));
+    } catch (e) {
+      AppLogger.w('Erreur zoomIn: $e');
+    }
   }
 
   @override

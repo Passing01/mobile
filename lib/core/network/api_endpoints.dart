@@ -12,7 +12,7 @@ class ApiEndpoints {
   static const String places = '/places/';
   static const String placesNearby = '/places/nearby';
   static const String placesSearch = '/places/search';
-  static String placeDetail(int placeId) => '/places/$placeId';
+  static String placeDetail(dynamic placeId) => '/places/$placeId';
   static String placeFavorite(int placeId) => '/places/$placeId/favorite';
   static const String userFavorites = '/places/favorites';
   static String removeFavorite(int placeId) => '/places/$placeId/favorite';

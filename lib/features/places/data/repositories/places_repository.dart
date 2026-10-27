@@ -509,13 +509,56 @@ class PlacesRepository {
     }
   }
 
+  /// Recherche un lieu par son ID dans le stockage local hors-ligne
+  Future<PlaceModel?> _findPlaceInLocalCache(String idStr) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final key in prefs.getKeys()) {
+        if (key.startsWith('qv_offline_cat_')) {
+          final raw = prefs.getString(key);
+          if (raw != null) {
+            final list = jsonDecode(raw) as List;
+            for (final item in list) {
+              if (item is Map) {
+                final props = item['properties'] as Map?;
+                final fId = props?['id']?.toString() ?? item['id']?.toString();
+                final fUuid = props?['uuid']?.toString();
+                if (fId == idStr || fUuid == idStr) {
+                  return PlaceModel.fromGeoJsonFeature(Map<dynamic, dynamic>.from(item));
+                }
+              }
+            }
+          }
+        }
+      }
+      final cachedPlaces = await _getCachedPlaces();
+      for (final p in cachedPlaces) {
+        if (p.id.toString() == idStr || p.uuid == idStr) {
+          return p;
+        }
+      }
+    } catch (e) {
+      AppLogger.w('Recherche lieu dans cache local: $e');
+    }
+    return null;
+  }
+
   /// Récupère le détail d'un lieu d'intérêt depuis GET /api/v1/places/{id}
-  Future<PlaceModel> getPlaceDetail(int placeId) async {
+  /// avec repli transparent sur le cache local hors-ligne en cas d'absence de réseau
+  Future<PlaceModel> getPlaceDetail(dynamic placeId) async {
+    final idStr = placeId.toString();
     try {
       final response = await apiClient.get<dynamic>(ApiEndpoints.placeDetail(placeId));
-      return PlaceModel.fromJson(response.data as Map<String, dynamic>);
+      final place = PlaceModel.fromJson(response.data as Map<String, dynamic>);
+      await _savePlacesToCache([place]);
+      return place;
     } catch (e) {
-      AppLogger.e('Erreur lors de la récupération du lieu #$placeId: $e');
+      AppLogger.i('Détail lieu #$idStr distant non disponible, tentative cache local: $e');
+      final cachedPlace = await _findPlaceInLocalCache(idStr);
+      if (cachedPlace != null) {
+        return cachedPlace;
+      }
+      AppLogger.e('Lieu introuvable ni en ligne ni hors-ligne #$idStr: $e');
       rethrow;
     }
   }

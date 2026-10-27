@@ -11,7 +11,6 @@ import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/core/widgets/loaders/app_shimmer.dart';
 import 'package:qvgestion_mobile/core/widgets/sheets/active_navigation_card.dart';
-import 'package:qvgestion_mobile/core/widgets/sheets/poi_preview_card.dart';
 import 'package:qvgestion_mobile/core/widgets/sheets/route_mode_selector_sheet.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/widgets/auth_modal_sheet.dart';
@@ -43,6 +42,8 @@ import 'package:dio/dio.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/places_list_bottom_sheet.dart';
+import 'package:qvgestion_mobile/core/widgets/sheets/poi_preview_card.dart';
+import 'package:qvgestion_mobile/features/places/presentation/widgets/place_detail_sheet.dart';
 
 /// Écran principal Cartographie & Navigation QvGestion / FASO NAV
 /// Conforme à la maquette officielle avec carte OpenStreetMap fonctionnelle
@@ -67,6 +68,9 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   maplibre.MapLibreMapController? _mapController;
   Timer? _placesDebounce;
   CancelToken? _placesCancelToken;
+
+  // Fiche détaillée du lieu sélectionné (Étape 5)
+  String? _activePlaceSheetId;
 
   LatLng? get vehiclePosition => _vehiclePosition;
 
@@ -306,7 +310,14 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   void _startRouteCalculation({
     required PlaceModel destinationPlace,
     required String mode,
+    String source = 'lieu touché',
   }) {
+    AppLogger.i('Démarrage itinéraire vers ${destinationPlace.nom} (source: $source, mode: $mode)');
+    debugPrint('Démarrage itinéraire vers ${destinationPlace.nom} (source: $source, mode: $mode)');
+    DebugInfo.instance.setDestination(
+      LatLng(destinationPlace.latitude, destinationPlace.longitude),
+      source: source,
+    );
     ref.read(selectedPlaceProvider.notifier).select(destinationPlace);
     ref.read(selectedRouteModeProvider.notifier).selectMode(mode);
 
@@ -328,6 +339,189 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
           mode: mode,
         );
     ref.read(mapScreenStateProvider.notifier).toRouteSelection();
+  }
+
+  void _closePlaceSheet() {
+    setState(() {
+      _activePlaceSheetId = null;
+    });
+    ref.read(selectedPlaceProvider.notifier).clear();
+    final mapService = ref.read(mapServiceProvider);
+    mapService.clearHighlight();
+  }
+
+  Map<String, dynamic> _closestTarget(List<Map<String, dynamic>> feats, maplibre.LatLng geo) {
+    Map<String, dynamic>? best;
+    double minDistance = double.infinity;
+    int maxImportance = -1;
+
+    for (final feat in feats) {
+      final geom = feat['geometry'];
+      if (geom is Map) {
+        final coords = geom['coordinates'];
+        if (coords is List && coords.length >= 2) {
+          final lon = (coords[0] as num).toDouble();
+          final lat = (coords[1] as num).toDouble();
+          final dLat = lat - geo.latitude;
+          final dLon = lon - geo.longitude;
+          final dist = dLat * dLat + dLon * dLon;
+
+          final props = feat['properties'] is Map ? feat['properties'] as Map : {};
+          final importance = (props['importance'] as num?)?.toInt() ?? 3;
+
+          // Le plus proche du doigt, à égalité le plus important
+          if (dist < minDistance - 1e-9) {
+            minDistance = dist;
+            maxImportance = importance;
+            best = feat;
+          } else if ((dist - minDistance).abs() <= 1e-9 && importance > maxImportance) {
+            maxImportance = importance;
+            best = feat;
+          }
+        }
+      }
+    }
+    return best ?? feats.first;
+  }
+
+  Future<void> _handleMapTap(math.Point<double> p, maplibre.LatLng geo) async {
+    final mapService = ref.read(mapServiceProvider);
+    final feats = await mapService.queryTapFeatures(p);
+    AppLogger.i('[TAP] ${geo.latitude},${geo.longitude} -> ${feats.length} élément(s)');
+    debugPrint('[TAP] ${geo.latitude},${geo.longitude} -> ${feats.length} élément(s)');
+
+    if (feats.isEmpty) {
+      // 5. Vide touché : ne rien faire, mais écrire une ligne de journal
+      // Plus aucune « Destination sur la carte » n'apparaît après un simple toucher
+      return;
+    }
+
+    // 2. Vérifier si une grappe est touchée
+    Map<String, dynamic>? cluster;
+    for (final f in feats) {
+      if ((f['properties'] as Map?)?['point_count'] != null) {
+        cluster = f;
+        break;
+      }
+    }
+    if (cluster != null) {
+      // 3. Grappe touchée : zoomer de deux niveaux, centré sur la grappe
+      await mapService.zoomIn(geo, delta: 2.0);
+      final z = mapService.controller?.cameraPosition?.zoom ?? 12.5;
+      AppLogger.i('[TAP] grappe -> zoom ${(z + 2.0).toStringAsFixed(1)}');
+      debugPrint('[TAP] grappe -> zoom ${(z + 2.0).toStringAsFixed(1)}');
+      return;
+    }
+
+    // 2. Choisir la bonne cible : point le plus proche du doigt, à égalité le plus important
+    final best = _closestTarget(feats, geo);
+    final props = best['properties'] as Map?;
+    final id = props?['id']?.toString() ?? props?['uuid']?.toString();
+
+    if (id == null) {
+      AppLogger.e('[TAP] lieu sans id : $props');
+      debugPrint('[TAP] lieu sans id : $props');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Lieu sans identifiant'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    AppLogger.i('[TAP] lieu sélectionné : ${props?['name'] ?? props?['nom']} (id: $id)');
+    debugPrint('[TAP] lieu sélectionné : ${props?['name'] ?? props?['nom']} (id: $id)');
+
+    // 4. Lieu touché : mettre un halo autour du point, puis ouvrir la fiche
+    await mapService.highlightFeature(best);
+    setState(() {
+      _activePlaceSheetId = id;
+    });
+  }
+
+  Future<void> _handleMapLongPress(math.Point<double> p, maplibre.LatLng geo) async {
+    AppLogger.i('[LONG_PRESS] ${geo.latitude},${geo.longitude}');
+    debugPrint('[LONG_PRESS] ${geo.latitude},${geo.longitude}');
+
+    final mapService = ref.read(mapServiceProvider);
+    // 6. Appui long : poser une épingle « Destination » et demander confirmation (« Aller ici ? »)
+    await mapService.dropDestinationPin(geo);
+
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.place_rounded, color: Color(0xFFDC2626), size: 26),
+            SizedBox(width: 8),
+            Text(
+              'Destination',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Aller ici ?',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Coordonnées : ${geo.latitude.toStringAsFixed(5)}, ${geo.longitude.toStringAsFixed(5)}',
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            key: const Key('btn_cancel_destination'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton(
+            key: const Key('btn_confirm_destination'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F766E),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Aller ici', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      // Démarre l'itinéraire avec source: 'appui long'
+      final destPlace = PlaceModel(
+        id: DateTime.now().millisecondsSinceEpoch,
+        nom: 'Destination libre',
+        categorieId: 0,
+        latitude: geo.latitude,
+        longitude: geo.longitude,
+        quartier: 'Ouagadougou',
+        adresse: '${geo.latitude.toStringAsFixed(4)}, ${geo.longitude.toStringAsFixed(4)}',
+      );
+      _startRouteCalculation(
+        destinationPlace: destPlace,
+        mode: 'motorcycle',
+        source: 'appui long',
+      );
+    } else {
+      // Refuser la retire
+      await mapService.clearDestinationPin();
+    }
   }
 
   @override
@@ -421,6 +615,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         children: [
           // 1. CARTE INTERACTIVE UNIFIÉE : MapLibre Native + OpenStreetMap
           FasoMap(
+            key: const Key('faso_map_widget'),
             styleUrl: styleUrl,
             attributionText: attributionText,
             onCameraIdle: _onCameraIdle,
@@ -452,21 +647,10 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               }
             },
             onTap: (point, latLng) async {
-              final place = await mapService.queryPlaceAt(point);
-              if (place != null) {
-                ref.read(selectedPlaceProvider.notifier).select(place);
-              } else {
-                final tappedPlace = PlaceModel(
-                  id: DateTime.now().millisecondsSinceEpoch,
-                  nom: 'Point repéré',
-                  categorieId: 0,
-                  latitude: latLng.latitude,
-                  longitude: latLng.longitude,
-                  quartier: 'Ouagadougou',
-                  adresse: '${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}',
-                );
-                ref.read(selectedPlaceProvider.notifier).select(tappedPlace);
-              }
+              await _handleMapTap(point, latLng);
+            },
+            onLongPress: (point, latLng) async {
+              await _handleMapLongPress(point, latLng);
             },
             onAttributionTap: () {
               AboutCreditsModal.show(context);
@@ -1044,7 +1228,25 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   }) {
     switch (screenState) {
       case MapScreenState.explore:
-        // Si un lieu est cliqué sur la carte ou recherché, afficher sa fiche de prévisualisation
+        // 1. Si un lieu est cliqué sur la carte (Étape 5) : Fiche détaillée PlaceDetailSheet
+        if (_activePlaceSheetId != null) {
+          return PlaceDetailSheet(
+            placeId: _activePlaceSheetId!,
+            onClose: _closePlaceSheet,
+            onNavigate: (place, source) {
+              _startRouteCalculation(
+                destinationPlace: place,
+                mode: 'motorcycle',
+                source: source,
+              );
+            },
+            onReport: () {
+              ReportIncidentModal.show(context);
+            },
+          );
+        }
+
+        // 2. Si un lieu est sélectionné depuis le tiroir ou la recherche : fiche PoiPreviewCard
         if (selectedPlace != null) {
           final tags = <String>[
             if (selectedPlace.horaires != null) selectedPlace.horaires!,
@@ -1065,24 +1267,28 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               _startRouteCalculation(
                 destinationPlace: selectedPlace,
                 mode: 'motorcycle',
+                source: 'lieu sélectionné',
               );
             },
             onNavigateAuto: () {
               _startRouteCalculation(
                 destinationPlace: selectedPlace,
                 mode: 'auto',
+                source: 'lieu sélectionné',
               );
             },
             onNavigateVelo: () {
               _startRouteCalculation(
                 destinationPlace: selectedPlace,
                 mode: 'bicycle',
+                source: 'lieu sélectionné',
               );
             },
             onNavigatePieton: () {
               _startRouteCalculation(
                 destinationPlace: selectedPlace,
                 mode: 'pedestrian',
+                source: 'lieu sélectionné',
               );
             },
             onClose: () {

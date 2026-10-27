@@ -11,6 +11,7 @@ class FasoMap extends StatefulWidget {
     required this.styleUrl,
     required this.onStyleReady,
     this.onTap,
+    this.onLongPress,
     this.onCameraIdle,
     this.attributionText = '© OpenStreetMap contributors',
     this.onAttributionTap,
@@ -24,6 +25,9 @@ class FasoMap extends StatefulWidget {
 
   /// Callback déclenché à chaque clic ou toucher sur la carte
   final void Function(Point<double> screen, LatLng geo)? onTap;
+
+  /// Callback déclenché lors d'un appui long sur la carte (pose destination avec confirmation)
+  final void Function(Point<double> screen, LatLng geo)? onLongPress;
 
   /// Callback déclenché à l'arrêt du mouvement de la caméra
   final VoidCallback? onCameraIdle;
@@ -84,12 +88,21 @@ class _FasoMapState extends State<FasoMap> {
       children: [
         if (isUnderTest)
           GestureDetector(
+            key: const Key('faso_map_gesture_detector'),
+            behavior: HitTestBehavior.opaque,
             onTap: () {
               const dummyPoint = Point<double>(100.0, 100.0);
               const dummyGeo = LatLng(12.3714, -1.5197);
               debugPrint('[MAP] toucher 12.3714, -1.5197');
               AppLogger.i('[MAP] toucher 12.3714, -1.5197');
               widget.onTap?.call(dummyPoint, dummyGeo);
+            },
+            onLongPress: () {
+              const dummyPoint = Point<double>(100.0, 100.0);
+              const dummyGeo = LatLng(12.3714, -1.5197);
+              debugPrint('[MAP] appui long 12.3714, -1.5197');
+              AppLogger.i('[MAP] appui long 12.3714, -1.5197');
+              widget.onLongPress?.call(dummyPoint, dummyGeo);
             },
             child: Container(
               color: const Color(0xFFF1F5F9),
@@ -128,6 +141,11 @@ class _FasoMapState extends State<FasoMap> {
               debugPrint('[MAP] toucher ${latLng.latitude}, ${latLng.longitude}');
               AppLogger.i('[MAP] toucher ${latLng.latitude}, ${latLng.longitude}');
               widget.onTap?.call(point, latLng);
+            },
+            onMapLongClick: (point, latLng) {
+              debugPrint('[MAP] appui long ${latLng.latitude}, ${latLng.longitude}');
+              AppLogger.i('[MAP] appui long ${latLng.latitude}, ${latLng.longitude}');
+              widget.onLongPress?.call(point, latLng);
             },
             onCameraIdle: widget.onCameraIdle,
           ),
