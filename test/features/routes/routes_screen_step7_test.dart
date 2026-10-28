@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:qvgestion_mobile/core/services/route_service.dart';
-import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 import 'package:qvgestion_mobile/features/routes/presentation/providers/routes_providers.dart';
 import 'package:qvgestion_mobile/features/routes/presentation/screens/routes_screen.dart';
@@ -152,3 +151,4 @@ class FakeSuccessRouteNotifier extends ActiveRouteNotifier {
     return AsyncValue.data(mockRoute);
   }
 }
+

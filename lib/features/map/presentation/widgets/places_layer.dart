@@ -10,71 +10,99 @@ import 'package:qvgestion_mobile/features/places/data/repositories/places_reposi
 class PlacesLayer {
   final MapLibreMapController? controller;
   bool _isConfigured = false;
+  Future<void>? _setupFuture;
 
   PlacesLayer([this.controller]);
 
   Future<void> setup() async {
     final c = controller;
     if (c == null) return;
+    if (_isConfigured) return;
+    if (_setupFuture != null) {
+      await _setupFuture;
+      return;
+    }
+
+    final completer = Completer<void>();
+    _setupFuture = completer.future;
+
     try {
       final sources = await c.getSourceIds();
       if (!sources.contains('places')) {
-        await c.addSource(
-          'places',
-          const GeojsonSourceProperties(
-            data: {'type': 'FeatureCollection', 'features': []},
-            cluster: true,
-            clusterRadius: 36,
-            clusterMaxZoom: 12,
-          ),
-        );
+        try {
+          await c.addSource(
+            'places',
+            const GeojsonSourceProperties(
+              data: {'type': 'FeatureCollection', 'features': []},
+              cluster: true,
+              clusterRadius: 36,
+              clusterMaxZoom: 12,
+            ),
+          );
+        } catch (e) {
+          if (!e.toString().contains('already exists')) rethrow;
+        }
       }
 
       final layers = await c.getLayerIds();
       if (!layers.contains('places-clusters')) {
-        await c.addCircleLayer(
-          'places',
-          'places-clusters',
-          const CircleLayerProperties(
-            circleColor: '#1E3A5F',
-            circleStrokeColor: '#FFFFFF',
-            circleStrokeWidth: 3.0,
-            circleRadius: 20.0,
-          ),
-          filter: ['has', 'point_count'],
-        );
+        try {
+          await c.addCircleLayer(
+            'places',
+            'places-clusters',
+            const CircleLayerProperties(
+              circleColor: '#1E3A5F',
+              circleStrokeColor: '#FFFFFF',
+              circleStrokeWidth: 3.0,
+              circleRadius: 20.0,
+            ),
+            filter: ['has', 'point_count'],
+          );
+        } catch (e) {
+          if (!e.toString().contains('already exists')) rethrow;
+        }
       }
 
       if (!layers.contains('places-cluster-count')) {
-        await c.addSymbolLayer(
-          'places',
-          'places-cluster-count',
-          const SymbolLayerProperties(
-            textField: [Expressions.get, 'point_count_abbreviated'],
-            textColor: '#FFFFFF',
-            textSize: 14.0,
-          ),
-          filter: ['has', 'point_count'],
-        );
+        try {
+          await c.addSymbolLayer(
+            'places',
+            'places-cluster-count',
+            const SymbolLayerProperties(
+              textField: [Expressions.get, 'point_count_abbreviated'],
+              textColor: '#FFFFFF',
+              textSize: 14.0,
+            ),
+            filter: ['has', 'point_count'],
+          );
+        } catch (e) {
+          if (!e.toString().contains('already exists')) rethrow;
+        }
       }
 
       if (!layers.contains('places-points')) {
-        await c.addCircleLayer(
-          'places',
-          'places-points',
-          const CircleLayerProperties(
-            circleColor: [Expressions.get, 'color'],
-            circleStrokeColor: '#FFFFFF',
-            circleStrokeWidth: 2.0,
-            circleRadius: 8.0,
-          ),
-          filter: ['!', ['has', 'point_count']],
-        );
+        try {
+          await c.addCircleLayer(
+            'places',
+            'places-points',
+            const CircleLayerProperties(
+              circleColor: [Expressions.get, 'color'],
+              circleStrokeColor: '#FFFFFF',
+              circleStrokeWidth: 2.0,
+              circleRadius: 8.0,
+            ),
+            filter: ['!', ['has', 'point_count']],
+          );
+        } catch (e) {
+          if (!e.toString().contains('already exists')) rethrow;
+        }
       }
 
       _isConfigured = true;
     } catch (e) {
       AppLogger.w('Configuration PlacesLayer MapLibre: $e');
+    } finally {
+      completer.complete();
     }
   }
 

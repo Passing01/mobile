@@ -108,6 +108,130 @@ class MapLibreMapService implements MapService {
     _layersConfigured = false;
   }
 
+  Future<void> _safeAddGeoJsonSource(
+    MapLibreMapController c,
+    Set<String> existingSources,
+    String id,
+    Map<String, dynamic> geojson, {
+    bool cluster = false,
+    double? clusterRadius,
+    double? clusterMaxZoom,
+  }) async {
+    if (!existingSources.contains(id)) {
+      try {
+        if (cluster) {
+          await c.addSource(
+            id,
+            GeojsonSourceProperties(
+              data: geojson,
+              cluster: true,
+              clusterRadius: clusterRadius,
+              clusterMaxZoom: clusterMaxZoom,
+            ),
+          );
+        } else {
+          await c.addGeoJsonSource(id, geojson);
+        }
+        existingSources.add(id);
+      } catch (e) {
+        if (!e.toString().contains('already exists')) {
+          AppLogger.w('Erreur addGeoJsonSource $id: $e');
+        }
+      }
+    } else {
+      try {
+        await c.setGeoJsonSource(id, geojson);
+      } catch (e) {
+        AppLogger.w('Erreur setGeoJsonSource $id: $e');
+      }
+    }
+  }
+
+  Future<void> _safeAddCircleLayer(
+    MapLibreMapController c,
+    Set<String> existingLayers,
+    String sourceId,
+    String layerId,
+    CircleLayerProperties properties, {
+    String? belowLayerId,
+    bool enableInteraction = false,
+    dynamic filter,
+  }) async {
+    if (!existingLayers.contains(layerId)) {
+      try {
+        await c.addCircleLayer(
+          sourceId,
+          layerId,
+          properties,
+          belowLayerId: belowLayerId,
+          enableInteraction: enableInteraction,
+          filter: filter,
+        );
+        existingLayers.add(layerId);
+      } catch (e) {
+        if (!e.toString().contains('already exists')) {
+          AppLogger.w('Erreur addCircleLayer $layerId: $e');
+        }
+      }
+    }
+  }
+
+  Future<void> _safeAddSymbolLayer(
+    MapLibreMapController c,
+    Set<String> existingLayers,
+    String sourceId,
+    String layerId,
+    SymbolLayerProperties properties, {
+    String? belowLayerId,
+    bool enableInteraction = false,
+    dynamic filter,
+  }) async {
+    if (!existingLayers.contains(layerId)) {
+      try {
+        await c.addSymbolLayer(
+          sourceId,
+          layerId,
+          properties,
+          belowLayerId: belowLayerId,
+          enableInteraction: enableInteraction,
+          filter: filter,
+        );
+        existingLayers.add(layerId);
+      } catch (e) {
+        if (!e.toString().contains('already exists')) {
+          AppLogger.w('Erreur addSymbolLayer $layerId: $e');
+        }
+      }
+    }
+  }
+
+  Future<void> _safeAddLineLayer(
+    MapLibreMapController c,
+    Set<String> existingLayers,
+    String sourceId,
+    String layerId,
+    LineLayerProperties properties, {
+    String? belowLayerId,
+    bool enableInteraction = false,
+  }) async {
+    if (!existingLayers.contains(layerId)) {
+      try {
+        await c.addLineLayer(
+          sourceId,
+          layerId,
+          properties,
+          belowLayerId: belowLayerId,
+          enableInteraction: enableInteraction,
+        );
+        existingLayers.add(layerId);
+      } catch (e) {
+        if (!e.toString().contains('already exists')) {
+          AppLogger.w('Erreur addLineLayer $layerId: $e');
+        }
+      }
+    }
+  }
+
   @override
   Future<void> setupLayers({MapTheme theme = MapTheme.light}) async {
     final c = _controller;
@@ -115,20 +239,29 @@ class MapLibreMapService implements MapService {
     _currentTheme = theme;
 
     try {
+      Set<String> existingSources = {};
+      Set<String> existingLayers = {};
+      try {
+        existingSources = (await c.getSourceIds()).cast<String>().toSet();
+        existingLayers = (await c.getLayerIds()).cast<String>().toSet();
+      } catch (_) {}
+
       // 1. Initialisation de la source des lieux avec grappes (clustering conforme Étape 4)
       final placesData = _cachedPlacesGeoJson ?? _buildPlacesGeoJson(_cachedPlaces);
-      await c.addSource(
+      await _safeAddGeoJsonSource(
+        c,
+        existingSources,
         placesSourceId,
-        GeojsonSourceProperties(
-          data: placesData,
-          cluster: true,
-          clusterRadius: 48,
-          clusterMaxZoom: 14,
-        ),
+        placesData,
+        cluster: true,
+        clusterRadius: 48.0,
+        clusterMaxZoom: 14.0,
       );
 
       // Couche des grappes (cercles bleu foncé avec contour blanc et rayon adaptatif)
-      await c.addCircleLayer(
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
         placesSourceId,
         placesClusterLayerId,
         const CircleLayerProperties(
@@ -150,7 +283,9 @@ class MapLibreMapService implements MapService {
       );
 
       // Couche du libellé chiffré au centre de la grappe
-      await c.addSymbolLayer(
+      await _safeAddSymbolLayer(
+        c,
+        existingLayers,
         placesSourceId,
         placesClusterCountLayerId,
         const SymbolLayerProperties(
@@ -174,7 +309,9 @@ class MapLibreMapService implements MapService {
       }
 
       // Couche des lieux : icône Maps de catégorie avec push/badge en haut affichant le nom
-      await c.addSymbolLayer(
+      await _safeAddSymbolLayer(
+        c,
+        existingLayers,
         placesSourceId,
         placesPointsLayerId,
         const SymbolLayerProperties(
@@ -210,8 +347,10 @@ class MapLibreMapService implements MapService {
       );
 
       // Couche du halo de sélection (conforme Étape 5 : rayon 22, transparent centre, blanc 4px sous places-points)
-      await c.addGeoJsonSource(selectedSourceId, const {'type': 'FeatureCollection', 'features': []});
-      await c.addCircleLayer(
+      await _safeAddGeoJsonSource(c, existingSources, selectedSourceId, const {'type': 'FeatureCollection', 'features': []});
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
         selectedSourceId,
         selectedRingLayerId,
         const CircleLayerProperties(
@@ -225,8 +364,10 @@ class MapLibreMapService implements MapService {
       );
 
       // Source et couches de l'épingle « Destination » (appui long libre avec confirmation)
-      await c.addGeoJsonSource(destinationPinSourceId, const {'type': 'FeatureCollection', 'features': []});
-      await c.addCircleLayer(
+      await _safeAddGeoJsonSource(c, existingSources, destinationPinSourceId, const {'type': 'FeatureCollection', 'features': []});
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
         destinationPinSourceId,
         destinationPinAuraLayerId,
         const CircleLayerProperties(
@@ -236,7 +377,9 @@ class MapLibreMapService implements MapService {
         ),
         enableInteraction: false,
       );
-      await c.addCircleLayer(
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
         destinationPinSourceId,
         destinationPinLayerId,
         const CircleLayerProperties(
@@ -247,7 +390,9 @@ class MapLibreMapService implements MapService {
         ),
         enableInteraction: false,
       );
-      await c.addSymbolLayer(
+      await _safeAddSymbolLayer(
+        c,
+        existingLayers,
         destinationPinSourceId,
         destinationPinLabelLayerId,
         const SymbolLayerProperties(
@@ -265,10 +410,12 @@ class MapLibreMapService implements MapService {
 
       // 2. Initialisation de la source et des couches de tracé d'itinéraire (liseré de contraste + intérieur)
       final routeGeoJson = _buildRouteGeoJson(_cachedRoute);
-      await c.addGeoJsonSource(routeSourceId, routeGeoJson);
+      await _safeAddGeoJsonSource(c, existingSources, routeSourceId, routeGeoJson);
 
       // 2.1 Couche de liseré de contraste (blanc en clair, très sombre en nuit)
-      await c.addLineLayer(
+      await _safeAddLineLayer(
+        c,
+        existingLayers,
         routeSourceId,
         routeCasingLayerId,
         LineLayerProperties(
@@ -282,7 +429,9 @@ class MapLibreMapService implements MapService {
       );
 
       // 2.2 Couche intérieure du tracé (bleu vif haute lisibilité)
-      await c.addLineLayer(
+      await _safeAddLineLayer(
+        c,
+        existingLayers,
         routeSourceId,
         routeLayerId,
         LineLayerProperties(
@@ -301,9 +450,11 @@ class MapLibreMapService implements MapService {
         _selectedPlace?.longitude,
         properties: {'title': _selectedPlace?.nom ?? ''},
       );
-      await c.addGeoJsonSource(selectedPlaceSourceId, selectedGeoJson);
+      await _safeAddGeoJsonSource(c, existingSources, selectedPlaceSourceId, selectedGeoJson);
 
-      await c.addCircleLayer(
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
         selectedPlaceSourceId,
         selectedPlaceAuraLayerId,
         const CircleLayerProperties(
@@ -314,7 +465,9 @@ class MapLibreMapService implements MapService {
         enableInteraction: false,
       );
 
-      await c.addCircleLayer(
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
         selectedPlaceSourceId,
         selectedPlacePinLayerId,
         const CircleLayerProperties(
@@ -326,7 +479,9 @@ class MapLibreMapService implements MapService {
         enableInteraction: false,
       );
 
-      await c.addSymbolLayer(
+      await _safeAddSymbolLayer(
+        c,
+        existingLayers,
         selectedPlaceSourceId,
         selectedPlaceLabelLayerId,
         SymbolLayerProperties(
@@ -343,9 +498,11 @@ class MapLibreMapService implements MapService {
 
       // 4. Initialisation de la source et couches de la position de l'utilisateur (GPS Puck)
       final userGeoJson = _buildPointGeoJson(_userLat, _userLon, properties: {'title': 'Ma position'});
-      await c.addGeoJsonSource(userLocationSourceId, userGeoJson);
+      await _safeAddGeoJsonSource(c, existingSources, userLocationSourceId, userGeoJson);
 
-      await c.addCircleLayer(
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
         userLocationSourceId,
         userLocationAuraLayerId,
         const CircleLayerProperties(
@@ -356,7 +513,9 @@ class MapLibreMapService implements MapService {
         enableInteraction: false,
       );
 
-      await c.addCircleLayer(
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
         userLocationSourceId,
         userLocationRingLayerId,
         const CircleLayerProperties(
@@ -368,7 +527,9 @@ class MapLibreMapService implements MapService {
         enableInteraction: false,
       );
 
-      await c.addCircleLayer(
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
         userLocationSourceId,
         userLocationCoreLayerId,
         const CircleLayerProperties(
