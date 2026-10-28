@@ -23,6 +23,7 @@ class FakeActiveRouteNotifier extends ActiveRouteNotifier {
   Future<RouteModel?> calculate({
     required CoordinateModel origin,
     required CoordinateModel destination,
+    List<CoordinateModel>? waypoints,
     required String mode,
   }) async {
     state = AsyncValue.data(initialRoute);

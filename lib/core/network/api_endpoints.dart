@@ -18,6 +18,7 @@ class ApiEndpoints {
   static String removeFavorite(int placeId) => '/places/$placeId/favorite';
 
   // --- Itinéraires & Navigation ---
+  static const String routes = '/routes';
   static const String routeModes = '/routes/modes';
   static const String routeCalculate = '/routes/calculate';
   static String routeVoiceStep(int routeId, int stepIndex) =>

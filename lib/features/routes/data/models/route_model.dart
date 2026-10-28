@@ -76,35 +76,74 @@ class ManeuverModel extends Equatable {
   final int order;
   final String instruction;
   final String? streetName;
+  final List<String> streetNames;
   final String maneuverType;
   final double distanceMeters;
   final int durationSeconds;
   final CoordinateModel location;
+  final dynamic type;
+  final double lat;
+  final double lng;
+  final double lengthM;
+  final double timeS;
 
   const ManeuverModel({
     required this.order,
     required this.instruction,
     this.streetName,
+    this.streetNames = const [],
     required this.maneuverType,
     required this.distanceMeters,
     required this.durationSeconds,
     required this.location,
+    this.type,
+    this.lat = 0.0,
+    this.lng = 0.0,
+    this.lengthM = 0.0,
+    this.timeS = 0.0,
   });
 
   factory ManeuverModel.fromJson(Map<dynamic, dynamic> rawJson) {
     final json = <String, dynamic>{};
     rawJson.forEach((k, v) => json[k.toString()] = v);
+
     final rawLoc = json['location'];
-    final locMap = rawLoc is Map ? rawLoc : <String, dynamic>{};
+    double lat = 0.0;
+    double lon = 0.0;
+    if (json.containsKey('lat') && json.containsKey('lng')) {
+      lat = (json['lat'] as num?)?.toDouble() ?? 0.0;
+      lon = (json['lng'] as num?)?.toDouble() ?? 0.0;
+    } else if (rawLoc is Map) {
+      lat = (rawLoc['latitude'] ?? rawLoc['lat'] as num?)?.toDouble() ?? 0.0;
+      lon = (rawLoc['longitude'] ?? rawLoc['lon'] ?? rawLoc['lng'] as num?)?.toDouble() ?? 0.0;
+    }
+
+    final streetNamesList = <String>[];
+    if (json['street_names'] is List) {
+      for (final s in json['street_names']) {
+        if (s != null) streetNamesList.add(s.toString());
+      }
+    }
+
+    final length = ((json['length_m'] ?? json['distance_meters'] ?? 0.0) as num).toDouble();
+    final time = ((json['time_s'] ?? json['duration_seconds'] ?? 0.0) as num).toDouble();
+    final streetName = json['street_name']?.toString() ??
+        (streetNamesList.isNotEmpty ? streetNamesList.join(', ') : null);
 
     return ManeuverModel(
       order: (json['order'] as num?)?.toInt() ?? 1,
       instruction: json['instruction']?.toString() ?? 'Continuer',
-      streetName: json['street_name'] as String?,
-      maneuverType: json['maneuver_type'] as String? ?? 'straight',
-      distanceMeters: (json['distance_meters'] as num?)?.toDouble() ?? 0.0,
-      durationSeconds: (json['duration_seconds'] as num?)?.toInt() ?? 0,
-      location: CoordinateModel.fromJson(locMap),
+      streetName: streetName,
+      streetNames: streetNamesList,
+      maneuverType: json['type']?.toString() ?? json['maneuver_type']?.toString() ?? 'straight',
+      distanceMeters: length,
+      durationSeconds: time.round(),
+      location: CoordinateModel(lat: lat, lon: lon, name: streetName),
+      type: json['type'],
+      lat: lat,
+      lng: lon,
+      lengthM: length,
+      timeS: time,
     );
   }
 
@@ -113,10 +152,16 @@ class ManeuverModel extends Equatable {
       'order': order,
       'instruction': instruction,
       if (streetName != null) 'street_name': streetName,
+      'street_names': streetNames,
       'maneuver_type': maneuverType,
       'distance_meters': distanceMeters,
       'duration_seconds': durationSeconds,
       'location': location.toJson(),
+      'type': type,
+      'lat': lat,
+      'lng': lng,
+      'length_m': lengthM,
+      'time_s': timeS,
     };
   }
 
@@ -125,10 +170,16 @@ class ManeuverModel extends Equatable {
         order,
         instruction,
         streetName,
+        streetNames,
         maneuverType,
         distanceMeters,
         durationSeconds,
         location,
+        type,
+        lat,
+        lng,
+        lengthM,
+        timeS,
       ];
 }
 
@@ -138,26 +189,43 @@ class RouteModel extends Equatable {
   final double distanceMeters;
   final int durationSeconds;
   final String durationFormatted;
+  final int legs;
   final List<List<double>> geometry;
   final List<double> boundingBox;
   final List<ManeuverModel> maneuvers;
   final String engine;
+  final int? startSnapM;
 
   const RouteModel({
     required this.mode,
     required this.distanceMeters,
     required this.durationSeconds,
     required this.durationFormatted,
+    this.legs = 1,
     required this.geometry,
     required this.boundingBox,
     required this.maneuvers,
     required this.engine,
+    this.startSnapM,
   });
 
   factory RouteModel.fromJson(Map<String, dynamic> json) {
     final rawGeo = json['geometry'];
     final parsedGeo = <List<double>>[];
-    if (rawGeo is List) {
+    if (rawGeo is Map) {
+      final coords = rawGeo['coordinates'];
+      if (coords is List) {
+        for (final point in coords) {
+          if (point is List && point.length >= 2) {
+            final c0 = (point[0] as num).toDouble();
+            final c1 = (point[1] as num).toDouble();
+            if (c0.isFinite && c1.isFinite) {
+              parsedGeo.add([c0, c1]);
+            }
+          }
+        }
+      }
+    } else if (rawGeo is List) {
       for (final point in rawGeo) {
         if (point is List && point.length >= 2) {
           final lat = (point[0] as num).toDouble();
@@ -179,15 +247,18 @@ class RouteModel extends Equatable {
       }
     }
     if (parsedBox.length < 4 && parsedGeo.isNotEmpty) {
-      double minLat = parsedGeo.first[0];
-      double maxLat = parsedGeo.first[0];
-      double minLon = parsedGeo.first[1];
-      double maxLon = parsedGeo.first[1];
+      double minLat = 90.0;
+      double maxLat = -90.0;
+      double minLon = 180.0;
+      double maxLon = -180.0;
       for (final pt in parsedGeo) {
-        if (pt[0] < minLat) minLat = pt[0];
-        if (pt[0] > maxLat) maxLat = pt[0];
-        if (pt[1] < minLon) minLon = pt[1];
-        if (pt[1] > maxLon) maxLon = pt[1];
+        // En GeoJSON [lon, lat]
+        final lon = pt[0] < 5.0 ? pt[0] : pt[1];
+        final lat = pt[1] > 8.0 ? pt[1] : pt[0];
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lon < minLon) minLon = lon;
+        if (lon > maxLon) maxLon = lon;
       }
       parsedBox..clear()..addAll([minLat, minLon, maxLat, maxLon]);
     }
@@ -198,7 +269,7 @@ class RouteModel extends Equatable {
       for (final m in rawManeuvers) {
         if (m is Map) {
           try {
-            parsedManeuvers.add(ManeuverModel.fromJson(m));
+            parsedManeuvers.add(ManeuverModel.fromJson(Map<String, dynamic>.from(m)));
           } catch (e) {
             AppLogger.w('Format de manœuvre ignoré: $e');
           }
@@ -206,22 +277,28 @@ class RouteModel extends Equatable {
       }
     }
 
-    final dist = ((json['distance_meters'] ?? 0.0) as num).toDouble();
-    final dur = ((json['duration_seconds'] ?? 0) as num).toInt();
+    final dist = ((json['distance_m'] ?? json['distance_meters'] ?? 0.0) as num).toDouble();
+    final dur = ((json['duration_s'] ?? json['duration_seconds'] ?? 0) as num).round();
     final durFormatted = (json['duration_formatted'] as String?) ??
-        '${(dur / 60).round().clamp(1, 180)} min';
+        (dur < 60
+            ? '${dur}s'
+            : dur < 3600
+                ? '${(dur / 60).round()} min'
+                : '${dur ~/ 3600} h ${(dur % 3600 ~/ 60)} min');
 
     return RouteModel(
-      mode: (json['mode'] as String?) ?? 'motorcycle',
+      mode: (json['mode'] as String?) ?? 'moto',
       distanceMeters: dist,
       durationSeconds: dur,
       durationFormatted: durFormatted,
+      legs: (json['legs'] as num?)?.toInt() ?? 1,
       geometry: parsedGeo,
       boundingBox: parsedBox.length >= 4
           ? parsedBox
           : const [12.35, -1.55, 12.38, -1.50],
       maneuvers: parsedManeuvers,
       engine: (json['engine'] as String?) ?? 'valhalla',
+      startSnapM: (json['start_snap_m'] as num?)?.toInt(),
     );
   }
 
@@ -231,10 +308,12 @@ class RouteModel extends Equatable {
       'distance_meters': distanceMeters,
       'duration_seconds': durationSeconds,
       'duration_formatted': durationFormatted,
+      'legs': legs,
       'geometry': geometry,
       'bounding_box': boundingBox,
       'maneuvers': maneuvers.map((m) => m.toJson()).toList(),
       'engine': engine,
+      if (startSnapM != null) 'start_snap_m': startSnapM,
     };
   }
 
@@ -252,9 +331,11 @@ class RouteModel extends Equatable {
         distanceMeters,
         durationSeconds,
         durationFormatted,
+        legs,
         geometry,
         boundingBox,
         maneuvers,
         engine,
+        startSnapM,
       ];
 }

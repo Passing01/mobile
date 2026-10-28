@@ -73,9 +73,9 @@ class MapLibreMapService implements MapService {
   static const String placesPointsLayerId = 'places-points';
   static const String placesLabelsLayerId = 'places-labels';
 
-  static const String routeSourceId = 'fasonav-route-source';
-  static const String routeCasingLayerId = 'fasonav-route-casing';
-  static const String routeLayerId = 'fasonav-route-layer';
+  static const String routeSourceId = 'route';
+  static const String routeCasingLayerId = 'route-casing';
+  static const String routeLayerId = 'route-line';
 
   static const String userLocationSourceId = 'fasonav-user-location-source';
   static const String userLocationAuraLayerId = 'fasonav-user-location-aura';
@@ -273,10 +273,11 @@ class MapLibreMapService implements MapService {
         routeCasingLayerId,
         LineLayerProperties(
           lineColor: theme.routeCasing,
-          lineWidth: 8.5,
+          lineWidth: 10.0,
           lineJoin: 'round',
           lineCap: 'round',
         ),
+        belowLayerId: placesPointsLayerId,
         enableInteraction: false,
       );
 
@@ -290,6 +291,7 @@ class MapLibreMapService implements MapService {
           lineJoin: 'round',
           lineCap: 'round',
         ),
+        belowLayerId: placesPointsLayerId,
         enableInteraction: false,
       );
 
@@ -409,24 +411,19 @@ class MapLibreMapService implements MapService {
     final c = _controller;
     if (c == null || !_layersConfigured) return;
 
+    if (route == null || route.geometry.length < 2) {
+      await clearRoute();
+      return;
+    }
+
     try {
       final geojson = _buildRouteGeoJson(route);
-      await c.setGeoJsonSource(routeSourceId, geojson);
-
-      if (route != null && route.boundingBox.length >= 4) {
-        final minLat = route.boundingBox[0];
-        final minLon = route.boundingBox[1];
-        final maxLat = route.boundingBox[2];
-        final maxLon = route.boundingBox[3];
-        if (minLat.isFinite && maxLat.isFinite && minLon.isFinite && maxLon.isFinite) {
-          await fitBounds(
-            minLat: minLat,
-            minLon: minLon,
-            maxLat: maxLat,
-            maxLon: maxLon,
-            padding: 80.0,
-          );
-        }
+      final features = geojson['features'] as List;
+      if (features.isNotEmpty) {
+        final geom = features.first['geometry'] as Map<String, dynamic>;
+        final coords = geom['coordinates'] as List;
+        await c.setGeoJsonSource(routeSourceId, geojson);
+        await _fitToRoute(coords);
       }
     } catch (e) {
       AppLogger.w('Mise à jour tracé itinéraire MapLibre: $e');
@@ -736,6 +733,37 @@ class MapLibreMapService implements MapService {
     };
   }
 
+  Future<void> _fitToRoute(List<dynamic> coords) async {
+    final c = _controller;
+    if (c == null || coords.length < 2) return;
+
+    double minLat = 90.0;
+    double maxLat = -90.0;
+    double minLon = 180.0;
+    double maxLon = -180.0;
+
+    for (final pt in coords) {
+      if (pt is List && pt.length >= 2) {
+        final lon = (pt[0] as num).toDouble();
+        final lat = (pt[1] as num).toDouble();
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lon < minLon) minLon = lon;
+        if (lon > maxLon) maxLon = lon;
+      }
+    }
+
+    if (minLat <= maxLat && minLon <= maxLon) {
+      await fitBounds(
+        minLat: minLat,
+        minLon: minLon,
+        maxLat: maxLat,
+        maxLon: maxLon,
+        padding: 80.0,
+      );
+    }
+  }
+
   Map<String, dynamic> _buildRouteGeoJson(RouteModel? route) {
     if (route == null || route.geometry.length < 2) {
       return const {
@@ -747,7 +775,10 @@ class MapLibreMapService implements MapService {
     final coords = <List<double>>[];
     for (final pt in route.geometry) {
       if (pt.length >= 2 && pt[0].isFinite && pt[1].isFinite) {
-        coords.add([pt[1].toDouble(), pt[0].toDouble()]); // [lng, lat] GeoJSON standard
+        // En GeoJSON standard : [longitude, latitude]
+        final lon = pt[0] < 5.0 ? pt[0].toDouble() : pt[1].toDouble();
+        final lat = pt[1] > 8.0 ? pt[1].toDouble() : pt[0].toDouble();
+        coords.add([lon, lat]);
       }
     }
 

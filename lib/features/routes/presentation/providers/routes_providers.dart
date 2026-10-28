@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
 import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
+import 'package:qvgestion_mobile/core/services/route_service.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
@@ -10,7 +11,8 @@ import 'package:qvgestion_mobile/features/routes/data/repositories/routes_reposi
 /// Provider du repository des itinéraires
 final routesRepositoryProvider = Provider<RoutesRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
-  return RoutesRepository(apiClient: apiClient);
+  final routeService = ref.watch(routeServiceProvider);
+  return RoutesRepository(apiClient: apiClient, routeService: routeService);
 });
 
 /// Modes de transport disponibles depuis l'API (/routes/modes)
@@ -20,10 +22,10 @@ final transportModesProvider =
   return repository.getTransportModes();
 });
 
-/// Mode de transport sélectionné ('motorcycle', 'auto', 'bicycle', 'pedestrian')
+/// Mode de transport sélectionné ('moto', 'voiture', 'pied')
 class SelectedRouteModeNotifier extends Notifier<String> {
   @override
-  String build() => 'motorcycle'; // Moto par défaut pour le contexte burkinabé
+  String build() => 'moto';
 
   void selectMode(String mode) => state = mode;
 }
@@ -40,24 +42,27 @@ class ActiveRouteNotifier extends Notifier<AsyncValue<RouteModel?>> {
     return const AsyncValue.data(null);
   }
 
-  /// Calcule l'itinéraire réel via l'endpoint /routes/calculate
+  /// Calcule l'itinéraire réel via POST /api/v1/routes
   Future<RouteModel?> calculate({
     required CoordinateModel origin,
     required CoordinateModel destination,
+    List<CoordinateModel>? waypoints,
     required String mode,
   }) async {
-    AppLogger.d('[ActiveRouteNotifier.calculate] Début calcul mode=$mode, origin=${origin.lat},${origin.lon}, dest=${destination.lat},${destination.lon}');
+    AppLogger.d(
+        '[ActiveRouteNotifier.calculate] Début calcul mode=$mode, origin=${origin.lat},${origin.lon}, dest=${destination.lat},${destination.lon}');
     state = const AsyncValue.loading();
     try {
       final repository = ref.read(routesRepositoryProvider);
       final route = await repository.calculateRoute(
         origin: origin,
         destination: destination,
+        waypoints: waypoints,
         mode: mode,
       );
-      AppLogger.d('[ActiveRouteNotifier.calculate] Route reçue: ${route.distanceMeters}m, ${route.geometry.length} points. Mise à jour de state.');
+      AppLogger.d(
+          '[ActiveRouteNotifier.calculate] Route reçue: ${route.distanceMeters}m, ${route.geometry.length} points.');
       state = AsyncValue.data(route);
-      AppLogger.d('[ActiveRouteNotifier.calculate] State mis à jour avec succès.');
       DebugInfo.instance.setRoute(
         points: route.geometry.length,
         distanceM: route.distanceMeters,
@@ -72,6 +77,7 @@ class ActiveRouteNotifier extends Notifier<AsyncValue<RouteModel?>> {
         tag: 'RoutingAPI',
       );
       state = AsyncValue.error(e, st);
+      DebugInfo.instance.clearRoute();
       return null;
     }
   }
@@ -87,7 +93,7 @@ final activeRouteProvider =
   ActiveRouteNotifier.new,
 );
 
-/// Calcul comparatif de tous les modes pour la feuille de sélection (Écran 2)
+/// Calcul comparatif des modes réels
 final multiModeRoutesProvider =
     FutureProvider<Map<String, RouteModel>>((ref) async {
   final selectedPlace = ref.watch(selectedPlaceProvider);
@@ -96,8 +102,6 @@ final multiModeRoutesProvider =
   final currentLocation = ref.watch(currentLocationProvider);
   final repository = ref.watch(routesRepositoryProvider);
   final selectedMode = ref.watch(selectedRouteModeProvider);
-
-  AppLogger.d('[multiModeRoutesProvider] Exécution pour selectedMode=$selectedMode');
 
   final origin = CoordinateModel(
     lat: currentLocation.lat,
@@ -110,71 +114,16 @@ final multiModeRoutesProvider =
     name: selectedPlace.nom,
   );
 
-  // 1. Récupérer ou calculer l'itinéraire pour le mode sélectionné
-  final activeRouteState = ref.watch(activeRouteProvider);
-  RouteModel? primaryRoute = activeRouteState.value;
-  AppLogger.d('[multiModeRoutesProvider] activeRouteState isLoading=${activeRouteState.isLoading}, hasValue=${primaryRoute != null}');
-  if (primaryRoute == null || primaryRoute.geometry.length < 2) {
-    if (activeRouteState.isLoading) {
-      AppLogger.d('[multiModeRoutesProvider] activeRouteState est loading, retour map vide temporaire');
-      return {};
-    }
-    try {
-      AppLogger.d('[multiModeRoutesProvider] Calcul de secours direct via repository pour $selectedMode');
-      primaryRoute = await repository.calculateRoute(
-        origin: origin,
-        destination: destination,
-        mode: selectedMode,
-      );
-    } catch (e) {
-      AppLogger.w('Échec calcul itinéraire mode primaire ($selectedMode): $e');
-    }
-  }
-
   final results = <String, RouteModel>{};
-  if (primaryRoute != null) {
-    results[primaryRoute.mode] = primaryRoute;
-    final dist = primaryRoute.distanceMeters;
-    AppLogger.d('[multiModeRoutesProvider] Génération des 4 modes basés sur ${primaryRoute.mode} ($dist m)');
-
-    // Vitesses moyennes calibrées selon les spécifications mobilité du Burkina Faso
-    const modeSpeeds = {
-      'motorcycle': 35.0, // Moto urbaine 35 km/h
-      'auto': 30.0,       // Voiture 30 km/h
-      'bicycle': 15.0,    // Vélo 15 km/h
-      'pedestrian': 5.0,  // Piéton 5 km/h
-    };
-
-    for (final mode in ['motorcycle', 'auto', 'bicycle', 'pedestrian']) {
-      if (!results.containsKey(mode)) {
-        final speed = modeSpeeds[mode] ?? 30.0;
-        final durSeconds = ((dist / (speed * 1000 / 3600))).round().clamp(60, 7200);
-        final durMinutes = (durSeconds / 60).round().clamp(1, 180);
-
-        results[mode] = RouteModel(
-          mode: mode,
-          distanceMeters: dist,
-          durationSeconds: durSeconds,
-          durationFormatted: '$durMinutes min',
-          geometry: primaryRoute.geometry,
-          boundingBox: primaryRoute.boundingBox,
-          maneuvers: primaryRoute.maneuvers.map((item) {
-            final stepDuration =
-                ((item.distanceMeters / (speed * 1000 / 3600))).round();
-            return ManeuverModel(
-              order: item.order,
-              instruction: item.instruction,
-              streetName: item.streetName,
-              maneuverType: item.maneuverType,
-              distanceMeters: item.distanceMeters,
-              durationSeconds: stepDuration,
-              location: item.location,
-            );
-          }).toList(),
-          engine: primaryRoute.engine,
-        );
-      }
-    }
+  try {
+    final route = await repository.calculateRoute(
+      origin: origin,
+      destination: destination,
+      mode: selectedMode,
+    );
+    results[route.mode] = route;
+  } catch (e) {
+    AppLogger.w('Échec calcul itinéraire mode $selectedMode: $e');
   }
 
   return results;
