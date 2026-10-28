@@ -121,125 +121,168 @@ class RouteModeSelectorSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              // Liste compacte des modes (permettant de voir clairement la carte au-dessus)
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 210),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: options.map((option) {
-                      final isSelected = option.id == selectedModeId;
-                      return GestureDetector(
+              // Barre horizontale style Google Maps / Waze affichant simultanément les 4 icônes (Moto, Voiture, Vélo, À pied)
+              Row(
+                children: options.map((option) {
+                  final isSelected = option.id == selectedModeId;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: InkWell(
                         onTap: () => onModeSelected(option.id),
+                        borderRadius: BorderRadius.circular(14),
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          margin: const EdgeInsets.only(bottom: 6),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                           decoration: BoxDecoration(
-                            color: isSelected ? AppColors.primaryLight : const Color(0xFFF9FAFB),
+                            color: isSelected ? AppColors.primary : const Color(0xFFF3F4F6),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
                               color: isSelected ? AppColors.primary : const Color(0xFFE5E7EB),
                               width: isSelected ? 2 : 1,
                             ),
                           ),
-                          child: Row(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: isSelected ? AppColors.primary : Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Icon(
-                                  option.icon,
-                                  color: isSelected ? Colors.white : AppColors.primary,
-                                  size: 20,
-                                ),
+                              Icon(
+                                option.icon,
+                                size: 22,
+                                color: isSelected ? Colors.white : AppColors.primary,
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Flexible(
-                                          child: Text(
-                                            option.title,
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: isSelected
-                                                  ? AppColors.primary
-                                                  : AppColors.textPrimaryLight,
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        if (option.isRecommended) ...[
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 5, vertical: 1),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.primary,
-                                              borderRadius: BorderRadius.circular(5),
-                                            ),
-                                            child: const Text(
-                                              'Recommandé',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 9,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                    Text(
-                                      option.subtitle,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.textSecondaryLight,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                              const SizedBox(height: 3),
+                              Text(
+                                _shortLabelFor(option.id, option.title),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected ? Colors.white : AppColors.textPrimaryLight,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    option.duration,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.textPrimaryLight,
-                                    ),
-                                  ),
-                                  Text(
-                                    option.distance,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondaryLight,
-                                    ),
-                                  ),
-                                ],
+                              Text(
+                                option.duration,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: isSelected
+                                      ? Colors.white.withValues(alpha: 0.9)
+                                      : AppColors.textSecondaryLight,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
                         ),
-                      );
-                    }).toList(),
-                  ),
-                ),
+                      ),
+                    ),
+                  );
+                }).toList(),
               ),
+              const SizedBox(height: 8),
+              // Détail du mode actif sélectionné
+              ...options.where((o) => o.id == selectedModeId || (options.every((x) => x.id != selectedModeId) && o == options.first)).take(1).map((option) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.primary, width: 1.5),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: AppColors.primary,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          option.icon,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    option.title,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (option.isRecommended) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary,
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: const Text(
+                                      'Recommandé',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            Text(
+                              option.subtitle,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondaryLight,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            option.duration,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimaryLight,
+                            ),
+                          ),
+                          Text(
+                            option.distance,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondaryLight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }),
               const SizedBox(height: 8),
               // Boutons Annuler + Démarrer la navigation vocale
               Row(
@@ -294,5 +337,14 @@ class RouteModeSelectorSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _shortLabelFor(String id, String fallbackTitle) {
+    final m = id.toLowerCase();
+    if (m.contains('moto')) return 'Moto';
+    if (m.contains('auto') || m.contains('voiture')) return 'Voiture';
+    if (m.contains('velo') || m.contains('bicycle')) return 'Vélo';
+    if (m.contains('pied') || m.contains('pedestrian')) return 'À pied';
+    return fallbackTitle;
   }
 }

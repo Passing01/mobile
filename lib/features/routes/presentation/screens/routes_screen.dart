@@ -371,7 +371,7 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Sélecteur de mode de transport (3 modes officiels : moto, voiture, pied)
+          // Sélecteur de mode de transport (Moto, Voiture, Vélo, À pied)
           Row(
             children: [
               Expanded(
@@ -383,7 +383,7 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
                       selectedMode == 'moto' || selectedMode == 'motorcycle',
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
                 child: _buildModeChip(
                   modeId: 'voiture',
@@ -392,7 +392,17 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
                   isSelected: selectedMode == 'voiture' || selectedMode == 'auto',
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildModeChip(
+                  modeId: 'velo',
+                  label: 'Vélo',
+                  icon: Icons.pedal_bike_rounded,
+                  isSelected:
+                      selectedMode == 'velo' || selectedMode == 'bicycle',
+                ),
+              ),
+              const SizedBox(width: 6),
               Expanded(
                 child: _buildModeChip(
                   modeId: 'pied',
@@ -629,6 +639,7 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
     return InkWell(
       onTap: () {
         ref.read(selectedRouteModeProvider.notifier).selectMode(modeId);
+        ref.read(mapServiceProvider).setTransportMode(modeId);
         if (_destCoord != null) {
           _calculate();
         }

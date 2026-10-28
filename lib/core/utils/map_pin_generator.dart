@@ -98,48 +98,67 @@ class MapPinGenerator {
     return pins;
   }
 
-  /// Dessine un médaillon circulaire pour représenter le mode de transport de l'utilisateur (Moto, Voiture, Piéton, Vélo)
+  /// Dessine un pin-avatar bien visible pour représenter le mode de transport de l'utilisateur
+  /// (Moto, Voiture, Piéton, Vélo) au-dessus du point GPS (iconAnchor: 'bottom').
   static Future<Uint8List> createModeAvatarBitmap({
     required Color color,
     required IconData icon,
-    double size = 84.0,
+    double size = 128.0,
   }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, size, size));
-    final center = Offset(size / 2, size / 2);
-    final radius = size * 0.38;
 
-    // 1. Halo extérieur lumineux
-    final haloPaint = Paint()
-      ..color = color.withValues(alpha: 0.25)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, size * 0.48, haloPaint);
+    final centerX = size / 2;
+    final tipY = size * 0.94;
+    final headRadius = size * 0.36;
+    final headCenterY = size * 0.42;
 
-    // 2. Ombre portée
+    // 1. Ombre portée sous la pointe et sous le médaillon
     final shadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.30)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
-    canvas.drawCircle(Offset(center.dx, center.dy + 2), radius, shadowPaint);
+      ..color = Colors.black.withValues(alpha: 0.32)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0);
+    canvas.drawCircle(
+      Offset(centerX, headCenterY + 3),
+      headRadius,
+      shadowPaint,
+    );
 
-    // 3. Disque principal coloré
+    // 2. Pointe triangulaire reliant le médaillon au point GPS exact
+    final pointerPath = Path()
+      ..moveTo(centerX - headRadius * 0.42, headCenterY + headRadius * 0.72)
+      ..lineTo(centerX, tipY)
+      ..lineTo(centerX + headRadius * 0.42, headCenterY + headRadius * 0.72)
+      ..close();
+
     final fillPaint = Paint()
       ..color = color
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius, fillPaint);
-
-    // 4. Anneau blanc de contraste
     final borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.0;
-    canvas.drawCircle(center, radius, borderPaint);
+      ..strokeWidth = 5.0
+      ..strokeJoin = StrokeJoin.round;
 
-    // 5. Pictogramme du moyen de déplacement (marcheur, moto, voiture, vélo)
+    canvas.drawPath(pointerPath, fillPaint);
+    canvas.drawPath(pointerPath, borderPaint);
+
+    // 3. Disque principal coloré du mode (Moto, Voiture, Vélo, Piéton)
+    canvas.drawCircle(Offset(centerX, headCenterY), headRadius, fillPaint);
+    canvas.drawCircle(Offset(centerX, headCenterY), headRadius, borderPaint);
+
+    // 4. Petit point blanc à la pointe inférieure
+    canvas.drawCircle(
+      Offset(centerX, tipY - 2),
+      3.5,
+      Paint()..color = Colors.white,
+    );
+
+    // 5. Pictogramme blanc grand format (marcheur, moto, voiture, vélo)
     final textPainter = TextPainter(textDirection: TextDirection.ltr);
     textPainter.text = TextSpan(
       text: String.fromCharCode(icon.codePoint),
       style: TextStyle(
-        fontSize: radius * 1.18,
+        fontSize: headRadius * 1.28,
         fontFamily: icon.fontFamily,
         package: icon.fontPackage,
         color: Colors.white,
@@ -150,8 +169,8 @@ class MapPinGenerator {
     textPainter.paint(
       canvas,
       Offset(
-        center.dx - textPainter.width / 2,
-        center.dy - textPainter.height / 2,
+        centerX - textPainter.width / 2,
+        headCenterY - textPainter.height / 2,
       ),
     );
 

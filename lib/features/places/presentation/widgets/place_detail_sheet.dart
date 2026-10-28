@@ -14,6 +14,7 @@ class PlaceDetailSheet extends ConsumerWidget {
   final PlaceModel? initialPlace;
   final VoidCallback onClose;
   final void Function(PlaceModel place, String source) onNavigate;
+  final void Function(PlaceModel place, String mode, String source)? onNavigateWithMode;
   final VoidCallback? onReport;
 
   const PlaceDetailSheet({
@@ -22,6 +23,7 @@ class PlaceDetailSheet extends ConsumerWidget {
     this.initialPlace,
     required this.onClose,
     required this.onNavigate,
+    this.onNavigateWithMode,
     this.onReport,
   });
 
@@ -299,7 +301,50 @@ class PlaceDetailSheet extends ConsumerWidget {
           ),
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+
+        // 2.5 Choix direct du mode de déplacement (Moto, Voiture, Vélo, À pied)
+        Row(
+          children: [
+            _buildModeQuickButton(
+              icon: Icons.two_wheeler_rounded,
+              label: 'Moto',
+              color: const Color(0xFF0F766E),
+              onTap: () => onNavigateWithMode != null
+                  ? onNavigateWithMode!(place, 'moto', 'lieu touché')
+                  : onNavigate(place, 'lieu touché'),
+            ),
+            const SizedBox(width: 6),
+            _buildModeQuickButton(
+              icon: Icons.directions_car_rounded,
+              label: 'Voiture',
+              color: const Color(0xFF1D4ED8),
+              onTap: () => onNavigateWithMode != null
+                  ? onNavigateWithMode!(place, 'voiture', 'lieu touché')
+                  : onNavigate(place, 'lieu touché'),
+            ),
+            const SizedBox(width: 6),
+            _buildModeQuickButton(
+              icon: Icons.pedal_bike_rounded,
+              label: 'Vélo',
+              color: const Color(0xFF16A34A),
+              onTap: () => onNavigateWithMode != null
+                  ? onNavigateWithMode!(place, 'velo', 'lieu touché')
+                  : onNavigate(place, 'lieu touché'),
+            ),
+            const SizedBox(width: 6),
+            _buildModeQuickButton(
+              icon: Icons.directions_walk_rounded,
+              label: 'À pied',
+              color: const Color(0xFFEA580C),
+              onTap: () => onNavigateWithMode != null
+                  ? onNavigateWithMode!(place, 'pied', 'lieu touché')
+                  : onNavigate(place, 'lieu touché'),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 10),
 
         // 3. Trois boutons d'action : « Itinéraire », « Appeler », « Signaler un problème »
         Row(
@@ -318,6 +363,7 @@ class PlaceDetailSheet extends ConsumerWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0F766E),
                   foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 44),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   elevation: 2,
@@ -346,6 +392,7 @@ class PlaceDetailSheet extends ConsumerWidget {
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 44),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   side: BorderSide(
                     color: hasPhone ? const Color(0xFF0F766E).withValues(alpha: 0.3) : const Color(0xFFE5E7EB),
@@ -371,6 +418,43 @@ class PlaceDetailSheet extends ConsumerWidget {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildModeQuickButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.30)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 20, color: color),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

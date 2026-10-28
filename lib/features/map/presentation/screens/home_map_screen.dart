@@ -9,7 +9,6 @@ import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
-import 'package:qvgestion_mobile/core/widgets/loaders/app_shimmer.dart';
 import 'package:qvgestion_mobile/core/widgets/sheets/active_navigation_card.dart';
 import 'package:qvgestion_mobile/core/widgets/sheets/route_mode_selector_sheet.dart';
 import 'package:qvgestion_mobile/features/auth/presentation/providers/auth_notifier.dart';
@@ -131,6 +130,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       _gpsTrackingSub?.cancel();
       _gpsTrackingSub = locationService.stream.listen((pos) {
         if (!locationService.isUsable(pos)) return;
+        ref.read(mapServiceProvider).updateUserLocation(pos.latitude, pos.longitude);
         ref.read(currentLocationProvider.notifier).updateLocation(
               pos.latitude,
               pos.longitude,
@@ -140,6 +140,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
 
       if (locationService.last != null) {
         final p = locationService.last!;
+        ref.read(mapServiceProvider).updateUserLocation(p.latitude, p.longitude);
         ref.read(currentLocationProvider.notifier).updateLocation(
               p.latitude,
               p.longitude,
@@ -836,6 +837,11 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       _refreshPlaces();
     });
 
+    // Synchronisation du mode de déplacement (Moto, Voiture, Vélo, À pied) vers l'avatar sur la carte
+    ref.listen<String>(selectedRouteModeProvider, (previous, next) {
+      mapService.setTransportMode(next);
+    });
+
     final isSatellite = ref.watch(isSatelliteModeProvider);
     final themeMode = ref.watch(themeModeProvider);
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
@@ -880,9 +886,13 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             onStyleReady: (controller) async {
               _mapController = controller;
               mapService.attach(controller);
+              await mapService.setTransportMode(ref.read(selectedRouteModeProvider));
               await mapService.setupLayers(theme: mapTheme);
+              final lastGps = ref.read(locationServiceProvider).last;
               final loc = ref.read(currentLocationProvider);
-              await mapService.updateUserLocation(loc.lat, loc.lon);
+              final initLat = lastGps?.latitude ?? loc.lat;
+              final initLon = lastGps?.longitude ?? loc.lon;
+              await mapService.updateUserLocation(initLat, initLon);
               final selPlace = ref.read(selectedPlaceProvider);
               if (selPlace != null) {
                 await mapService.setSelectedPlace(selPlace);
@@ -951,6 +961,14 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                   ],
                 ),
               ),
+            ),
+
+          // 1.1b SÉLECTEUR FLOTTANT DE MODE DE DÉPLACEMENT (Moto, Voiture, Vélo, À pied)
+          if (screenState != MapScreenState.activeNavigation)
+            Positioned(
+              left: 16,
+              bottom: 256,
+              child: _buildQuickTransportModeBar(),
             ),
 
           // 1.2 CONTRÔLES FLOTTANTS CARTE (Signalement, Centrage GPS)
@@ -1506,6 +1524,109 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     return 'MOTO';
   }
 
+  Widget _buildQuickTransportModeBar() {
+    final selectedMode = ref.watch(selectedRouteModeProvider).toLowerCase();
+    final isMoto = selectedMode == 'moto' || selectedMode == 'motorcycle';
+    final isAuto = selectedMode == 'voiture' || selectedMode == 'auto';
+    final isVelo = selectedMode == 'velo' || selectedMode == 'bicycle';
+    final isPied = selectedMode == 'pied' || selectedMode == 'pedestrian';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildModePillItem(
+            modeId: 'motorcycle',
+            icon: Icons.two_wheeler_rounded,
+            label: 'Moto',
+            color: const Color(0xFF0F766E),
+            isSelected: isMoto,
+          ),
+          const SizedBox(width: 4),
+          _buildModePillItem(
+            modeId: 'auto',
+            icon: Icons.directions_car_rounded,
+            label: 'Voiture',
+            color: const Color(0xFF1D4ED8),
+            isSelected: isAuto,
+          ),
+          const SizedBox(width: 4),
+          _buildModePillItem(
+            modeId: 'bicycle',
+            icon: Icons.pedal_bike_rounded,
+            label: 'Vélo',
+            color: const Color(0xFF16A34A),
+            isSelected: isVelo,
+          ),
+          const SizedBox(width: 4),
+          _buildModePillItem(
+            modeId: 'pedestrian',
+            icon: Icons.directions_walk_rounded,
+            label: 'À pied',
+            color: const Color(0xFFEA580C),
+            isSelected: isPied,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModePillItem({
+    required String modeId,
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isSelected,
+  }) {
+    return InkWell(
+      onTap: () {
+        ref.read(selectedRouteModeProvider.notifier).selectMode(modeId);
+        ref.read(mapServiceProvider).setTransportMode(modeId);
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? Colors.white : color,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.white : const Color(0xFF1E293B),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildRoutePreviewTopBar(PlaceModel? selectedPlace) {
     final selectedMode = ref.watch(selectedRouteModeProvider);
     final activeRoute = ref.watch(activeRouteProvider).value;
@@ -1748,7 +1869,14 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             onNavigate: (place, source) {
               _startRouteCalculation(
                 destinationPlace: place,
-                mode: 'motorcycle',
+                mode: ref.read(selectedRouteModeProvider),
+                source: source,
+              );
+            },
+            onNavigateWithMode: (place, mode, source) {
+              _startRouteCalculation(
+                destinationPlace: place,
+                mode: mode,
                 source: source,
               );
             },
@@ -1835,157 +1963,139 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         );
 
       case MapScreenState.routeSelection:
-        // Écran 2 : Sélection du mode de transport
+        // Écran 2 : Sélection du mode de transport (toujours affiché immédiatement avec les 4 icônes)
         final multiRoutesAsync = ref.watch(multiModeRoutesProvider);
         final selectedMode = ref.watch(selectedRouteModeProvider);
         final currentLocation = ref.watch(currentLocationProvider);
+        final routes = multiRoutesAsync.value ?? const <String, RouteModel>{};
+        final fallbackActive = activeRouteState.value;
 
-        return multiRoutesAsync.when(
-          data: (routes) {
-            final motoRoute = routes['motorcycle'] ?? routes['moto'];
-            final autoRoute = routes['auto'] ?? routes['voiture'];
-            final veloRoute = routes['bicycle'] ?? routes['velo'] ?? routes['pied'];
-            final pietonRoute = routes['pedestrian'] ?? routes['pied'];
+        final motoRoute = routes['motorcycle'] ??
+            routes['moto'] ??
+            ((selectedMode == 'motorcycle' || selectedMode == 'moto') ? fallbackActive : null);
+        final autoRoute = routes['auto'] ??
+            routes['voiture'] ??
+            ((selectedMode == 'auto' || selectedMode == 'voiture') ? fallbackActive : null);
+        final veloRoute = routes['bicycle'] ??
+            routes['velo'] ??
+            routes['pied'] ??
+            ((selectedMode == 'bicycle' || selectedMode == 'velo') ? fallbackActive : null);
+        final pietonRoute = routes['pedestrian'] ??
+            routes['pied'] ??
+            ((selectedMode == 'pedestrian' || selectedMode == 'pied') ? fallbackActive : null);
 
-            final options = [
-              RouteModeOption(
-                id: 'motorcycle',
-                title: 'Moto / Deux-Roues',
-                subtitle: motoRoute != null
-                    ? 'Pistes prioritaires • ${motoRoute.engine}'
-                    : 'Rapide à Ouagadougou',
-                duration: motoRoute?.durationFormatted ?? '11 min',
-                distance: motoRoute?.distanceFormatted ?? '6.4 km',
-                icon: Icons.two_wheeler_rounded,
-                isRecommended: true,
-              ),
-              RouteModeOption(
-                id: 'auto',
-                title: 'Voiture / Taxi',
-                subtitle: autoRoute != null
-                    ? 'Itinéraire goudronné • ${autoRoute.engine}'
-                    : 'Voies principales',
-                duration: autoRoute?.durationFormatted ?? '16 min',
-                distance: autoRoute?.distanceFormatted ?? '7.2 km',
-                icon: Icons.directions_car_rounded,
-              ),
-              RouteModeOption(
-                id: 'bicycle',
-                title: 'Vélo',
-                subtitle: veloRoute != null
-                    ? 'Pistes secondaires'
-                    : 'Voies secondaires',
-                duration: veloRoute?.durationFormatted ?? '24 min',
-                distance: veloRoute?.distanceFormatted ?? '5.9 km',
-                icon: Icons.pedal_bike_rounded,
-              ),
-              RouteModeOption(
-                id: 'pedestrian',
-                title: 'Piéton / À pied',
-                subtitle: pietonRoute != null
-                    ? 'Passages piétons & allées'
-                    : 'Trottoirs et allées',
-                duration: pietonRoute?.durationFormatted ?? '45 min',
-                distance: pietonRoute?.distanceFormatted ?? '4.8 km',
-                icon: Icons.directions_walk_rounded,
-              ),
-            ];
+        final options = [
+          RouteModeOption(
+            id: 'motorcycle',
+            title: 'Moto / Deux-Roues',
+            subtitle: motoRoute != null
+                ? 'Pistes prioritaires • ${motoRoute.engine}'
+                : 'Rapide à Ouagadougou',
+            duration: motoRoute?.durationFormatted ?? '11 min',
+            distance: motoRoute?.distanceFormatted ?? '6.4 km',
+            icon: Icons.two_wheeler_rounded,
+            isRecommended: true,
+          ),
+          RouteModeOption(
+            id: 'auto',
+            title: 'Voiture / Taxi',
+            subtitle: autoRoute != null
+                ? 'Itinéraire goudronné • ${autoRoute.engine}'
+                : 'Voies principales',
+            duration: autoRoute?.durationFormatted ?? '16 min',
+            distance: autoRoute?.distanceFormatted ?? '7.2 km',
+            icon: Icons.directions_car_rounded,
+          ),
+          RouteModeOption(
+            id: 'bicycle',
+            title: 'Vélo',
+            subtitle: veloRoute != null
+                ? 'Pistes secondaires'
+                : 'Voies secondaires',
+            duration: veloRoute?.durationFormatted ?? '24 min',
+            distance: veloRoute?.distanceFormatted ?? '5.9 km',
+            icon: Icons.pedal_bike_rounded,
+          ),
+          RouteModeOption(
+            id: 'pedestrian',
+            title: 'Piéton / À pied',
+            subtitle: pietonRoute != null
+                ? 'Passages piétons & allées'
+                : 'Trottoirs et allées',
+            duration: pietonRoute?.durationFormatted ?? '45 min',
+            distance: pietonRoute?.distanceFormatted ?? '4.8 km',
+            icon: Icons.directions_walk_rounded,
+          ),
+        ];
 
-            return RouteModeSelectorSheet(
-              originName: currentLocation.label,
-              destinationName: selectedPlace?.nom ?? 'Destination',
-              options: options,
-              selectedModeId: selectedMode,
-              onModeSelected: (modeId) {
-                ref.read(selectedRouteModeProvider.notifier).selectMode(modeId);
-                ref.read(mapServiceProvider).setTransportMode(modeId);
-                final precalculated = routes[modeId];
-                if (precalculated != null) {
-                  ref.read(activeRouteProvider.notifier).setRoute(precalculated);
-                } else if (selectedPlace != null) {
-                  final locService = ref.read(locationServiceProvider);
-                  final lastGps = locService.last;
-                  final origin = (lastGps != null)
-                      ? CoordinateModel(
-                          lat: lastGps.latitude,
-                          lon: lastGps.longitude,
-                          name: 'Ma position GPS',
-                        )
-                      : CoordinateModel(
-                          lat: currentLocation.lat,
-                          lon: currentLocation.lon,
-                          name: currentLocation.label,
-                        );
-                  ref.read(activeRouteProvider.notifier).calculate(
-                        origin: origin,
-                        destination: CoordinateModel(
-                          lat: selectedPlace.latitude,
-                          lon: selectedPlace.longitude,
-                          name: selectedPlace.nom,
-                        ),
-                        mode: modeId,
-                      );
-                }
-              },
-              onBack: _cancelRouteAndNavigation,
-              onConfirm: () async {
-                final selectedModeNow = ref.read(selectedRouteModeProvider);
-                ref.read(mapServiceProvider).setTransportMode(selectedModeNow);
-                ref.read(mapScreenStateProvider.notifier).toActiveNavigation();
-                final locService = ref.read(locationServiceProvider);
-                final p = locService.last;
-                if (p != null) {
-                  setState(() => _following = true);
-                  ref.read(mapServiceProvider).animateCamera(
-                        lat: p.latitude,
-                        lng: p.longitude,
-                        zoom: 17.0,
-                      );
-                }
-                final route = ref.read(activeRouteProvider).value;
-                final activeLang = ref.read(guidanceLanguageProvider);
-                if (route != null) {
-                  await ref
-                      .read(activeEnrichedRouteProvider.notifier)
-                      .enrichRoute(route: route, language: activeLang);
-                }
-                ref.read(currentManeuverIndexProvider.notifier).reset();
-                if (mounted) {
-                  AppSnackbar.showSuccess(
-                    context,
-                    title: 'Guidage démarré',
-                    message:
-                        'Consignes vocales locales en ${activeLang.toUpperCase()} actives.',
+        return RouteModeSelectorSheet(
+          originName: currentLocation.label,
+          destinationName: selectedPlace?.nom ?? 'Destination',
+          options: options,
+          selectedModeId: selectedMode,
+          onModeSelected: (modeId) {
+            ref.read(selectedRouteModeProvider.notifier).selectMode(modeId);
+            ref.read(mapServiceProvider).setTransportMode(modeId);
+            final precalculated = routes[modeId];
+            if (precalculated != null) {
+              ref.read(activeRouteProvider.notifier).setRoute(precalculated);
+            } else if (selectedPlace != null) {
+              final locService = ref.read(locationServiceProvider);
+              final lastGps = locService.last;
+              final origin = (lastGps != null)
+                  ? CoordinateModel(
+                      lat: lastGps.latitude,
+                      lon: lastGps.longitude,
+                      name: 'Ma position GPS',
+                    )
+                  : CoordinateModel(
+                      lat: currentLocation.lat,
+                      lon: currentLocation.lon,
+                      name: currentLocation.label,
+                    );
+              ref.read(activeRouteProvider.notifier).calculate(
+                    origin: origin,
+                    destination: CoordinateModel(
+                      lat: selectedPlace.latitude,
+                      lon: selectedPlace.longitude,
+                      name: selectedPlace.nom,
+                    ),
+                    mode: modeId,
                   );
-                }
-              },
-            );
+            }
           },
-          loading: () => const Padding(
-            padding: EdgeInsets.all(16),
-            child: RouteModeShimmer(),
-          ),
-          error: (err, _) => Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Erreur de calcul d\'itinéraire: $err'),
-                const SizedBox(height: 8),
-                ElevatedButton(
-                  onPressed: () {
-                    ref.invalidate(multiModeRoutesProvider);
-                  },
-                  child: const Text('Réessayer'),
-                ),
-              ],
-            ),
-          ),
+          onBack: _cancelRouteAndNavigation,
+          onConfirm: () async {
+            final selectedModeNow = ref.read(selectedRouteModeProvider);
+            ref.read(mapServiceProvider).setTransportMode(selectedModeNow);
+            ref.read(mapScreenStateProvider.notifier).toActiveNavigation();
+            final locService = ref.read(locationServiceProvider);
+            final p = locService.last;
+            if (p != null) {
+              setState(() => _following = true);
+              ref.read(mapServiceProvider).animateCamera(
+                    lat: p.latitude,
+                    lng: p.longitude,
+                    zoom: 17.0,
+                  );
+            }
+            final route = ref.read(activeRouteProvider).value;
+            final activeLang = ref.read(guidanceLanguageProvider);
+            if (route != null) {
+              await ref
+                  .read(activeEnrichedRouteProvider.notifier)
+                  .enrichRoute(route: route, language: activeLang);
+            }
+            ref.read(currentManeuverIndexProvider.notifier).reset();
+            if (mounted) {
+              AppSnackbar.showSuccess(
+                context,
+                title: 'Guidage démarré',
+                message:
+                    'Consignes vocales locales en ${activeLang.toUpperCase()} actives.',
+              );
+            }
+          },
         );
 
       case MapScreenState.activeNavigation:

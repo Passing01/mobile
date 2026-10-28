@@ -105,16 +105,23 @@ class MapLibreMapService implements MapService {
 
   double? _userLat;
   double? _userLon;
-  String? _transportMode;
+  String? _transportMode = 'moto';
   PlaceModel? _selectedPlace;
 
   String _modeIconFor(String? mode) {
-    if (mode == null || mode.isEmpty) return '';
-    final m = mode.toLowerCase().trim();
+    final m = (mode ?? 'moto').toLowerCase().trim();
     if (m == 'pied' || m == 'pedestrian' || m == 'walk') return 'mode-pied';
     if (m == 'voiture' || m == 'auto' || m == 'car') return 'mode-voiture';
     if (m == 'velo' || m == 'bicycle' || m == 'bike') return 'mode-velo';
     return 'mode-moto';
+  }
+
+  String _modeLabelFor(String? mode) {
+    final m = (mode ?? 'moto').toLowerCase().trim();
+    if (m == 'pied' || m == 'pedestrian' || m == 'walk') return 'Ma position • À pied';
+    if (m == 'voiture' || m == 'auto' || m == 'car') return 'Ma position • Voiture';
+    if (m == 'velo' || m == 'bicycle' || m == 'bike') return 'Ma position • Vélo';
+    return 'Ma position • Moto';
   }
 
   @override
@@ -556,6 +563,7 @@ class MapLibreMapService implements MapService {
         properties: {
           'title': 'Ma position',
           'mode_icon': _modeIconFor(_transportMode),
+          'mode_label': _modeLabelFor(_transportMode),
         },
       );
       await _safeAddGeoJsonSource(c, existingSources, userLocationSourceId, userGeoJson);
@@ -602,12 +610,38 @@ class MapLibreMapService implements MapService {
         userLocationSourceId,
         userLocationModeLayerId,
         const SymbolLayerProperties(
-          iconImage: [Expressions.get, 'mode_icon'],
-          iconSize: 0.78,
+          iconImage: [
+            Expressions.match,
+            [
+              Expressions.coalesce,
+              [Expressions.get, 'mode_icon'],
+              'mode-moto',
+            ],
+            'mode-moto',
+            'mode-moto',
+            'mode-voiture',
+            'mode-voiture',
+            'mode-pied',
+            'mode-pied',
+            'mode-velo',
+            'mode-velo',
+            'mode-moto',
+          ],
+          iconSize: 0.90,
+          iconAnchor: 'bottom',
           iconAllowOverlap: true,
           iconIgnorePlacement: true,
+          textField: [Expressions.get, 'mode_label'],
+          textSize: 11.5,
+          textColor: '#0F172A',
+          textHaloColor: '#FFFFFF',
+          textHaloWidth: 2.2,
+          textAnchor: 'top',
+          textOffset: [0, 0.7],
+          textFont: ['Noto Sans Bold'],
+          textAllowOverlap: true,
+          textIgnorePlacement: true,
         ),
-        filter: ['!=', [Expressions.get, 'mode_icon'], ''],
         enableInteraction: false,
       );
 
@@ -695,6 +729,7 @@ class MapLibreMapService implements MapService {
         properties: {
           'title': 'Ma position',
           'mode_icon': _modeIconFor(_transportMode),
+          'mode_label': _modeLabelFor(_transportMode),
         },
       );
       await c.setGeoJsonSource(userLocationSourceId, geojson);
@@ -705,7 +740,7 @@ class MapLibreMapService implements MapService {
 
   @override
   Future<void> setTransportMode(String? mode) async {
-    _transportMode = mode;
+    _transportMode = (mode == null || mode.isEmpty) ? 'moto' : mode;
     final lat = _userLat;
     final lon = _userLon;
     if (lat != null && lon != null) {
