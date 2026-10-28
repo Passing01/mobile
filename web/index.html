@@ -29,6 +29,15 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
+  <!-- MapLibre GL JS & CSS for maplibre_gl_web -->
+  <link href="maplibre-gl.css" rel="stylesheet" onerror="this.onerror=null;this.href='https://unpkg.com/maplibre-gl@^5.24.0/dist/maplibre-gl.css';" />
+  <script src="maplibre-gl.js"></script>
+  <script>
+    if (typeof maplibregl === 'undefined') {
+      document.write('<script src="https://unpkg.com/maplibre-gl@^5.24.0/dist/maplibre-gl.js"><\\/script>');
+    }
+  </script>
+
   <title>qvgestion_mobile</title>
   <link rel="manifest" href="manifest.json">
 </head>

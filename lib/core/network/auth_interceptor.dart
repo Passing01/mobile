@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:qvgestion_mobile/core/config/env_config.dart';
 import 'package:qvgestion_mobile/core/network/api_endpoints.dart';
 import 'package:qvgestion_mobile/core/storage/token_storage.dart';
@@ -35,8 +36,10 @@ class AuthInterceptor extends QueuedInterceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    // Ajout de la compression GZip pour économie de data au Burkina Faso
-    options.headers['Accept-Encoding'] = 'gzip';
+    // Ajout de la compression GZip pour économie de data au Burkina Faso (sur mobile natif uniquement car interdit par les navigateurs web)
+    if (!kIsWeb) {
+      options.headers['Accept-Encoding'] = 'gzip';
+    }
     options.headers['Accept'] = 'application/json';
 
     // Injection automatique du token Bearer si disponible
