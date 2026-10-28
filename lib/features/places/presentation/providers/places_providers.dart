@@ -77,18 +77,15 @@ final mapBoundingBoxProvider =
   MapBoundingBoxNotifier.new,
 );
 
-/// Provider GeoJSON des lieux de la zone visible selon les catégories cochées
+/// Provider GeoJSON des lieux de la zone visible selon les catégories cochées (ou tous les lieux si aucun filtre)
 final placesGeoJsonProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   final selectedCats = ref.watch(selectedCategoriesProvider);
-  if (selectedCats.isEmpty) {
-    return {'type': 'FeatureCollection', 'features': []};
-  }
   final repo = ref.watch(placesRepositoryProvider);
   final bbox = ref.watch(mapBoundingBoxProvider);
   final loc = ref.watch(currentLocationProvider);
 
   return repo.getPlacesGeoJson(
-    categories: selectedCats.toList(),
+    categories: selectedCats.isNotEmpty ? selectedCats.toList() : null,
     bbox: bbox,
     lat: loc.lat,
     lng: loc.lon,
@@ -288,10 +285,19 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
     ref.onDispose(() {
       _positionStreamSub?.cancel();
     });
+    final locService = ref.read(locationServiceProvider);
+    final lastPos = locService.last;
+    if (lastPos != null && locService.isUsable(lastPos)) {
+      return LocationState(
+        lat: lastPos.latitude,
+        lon: lastPos.longitude,
+        label: 'Ma position GPS',
+      );
+    }
     return const LocationState(
       lat: AppConstants.ouagaCenterLatitude,
       lon: AppConstants.ouagaCenterLongitude,
-      label: 'Ouagadougou, 1200 Logements',
+      label: 'Ouagadougou',
     );
   }
 

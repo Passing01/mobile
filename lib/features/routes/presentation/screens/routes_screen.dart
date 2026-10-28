@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
+import 'package:qvgestion_mobile/core/services/location_service.dart';
 import 'package:qvgestion_mobile/core/services/route_service.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
@@ -47,6 +49,31 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
     _destController = TextEditingController();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final locService = ref.read(locationServiceProvider);
+      final lastGps = locService.last;
+      if (lastGps != null) {
+        setState(() {
+          _originCoord = CoordinateModel(
+            lat: lastGps.latitude,
+            lon: lastGps.longitude,
+            name: 'Ma position GPS',
+          );
+          _originController.text = 'Ma position GPS';
+        });
+      } else {
+        final curr = ref.read(currentLocationProvider);
+        if (curr.lat != AppConstants.ouagaCenterLatitude || curr.lon != AppConstants.ouagaCenterLongitude) {
+          setState(() {
+            _originCoord = CoordinateModel(
+              lat: curr.lat,
+              lon: curr.lon,
+              name: curr.label.isNotEmpty ? curr.label : 'Ma position GPS',
+            );
+            _originController.text = curr.label.isNotEmpty ? curr.label : 'Ma position GPS';
+          });
+        }
+      }
+
       final selectedPlace = ref.read(selectedPlaceProvider);
       if (selectedPlace != null) {
         setState(() {
@@ -89,15 +116,24 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
   }
 
   void _calculate() {
+    final locService = ref.read(locationServiceProvider);
+    final lastGps = locService.last;
     final curr = ref.read(currentLocationProvider);
+
     final origin = _originCoord ??
-        CoordinateModel(
-          lat: curr.lat,
-          lon: curr.lon,
-          name: _originController.text.isNotEmpty
-              ? _originController.text
-              : (curr.label.isNotEmpty ? curr.label : 'Ma position GPS'),
-        );
+        ((lastGps != null)
+            ? CoordinateModel(
+                lat: lastGps.latitude,
+                lon: lastGps.longitude,
+                name: 'Ma position GPS',
+              )
+            : CoordinateModel(
+                lat: curr.lat,
+                lon: curr.lon,
+                name: _originController.text.isNotEmpty
+                    ? _originController.text
+                    : (curr.label.isNotEmpty ? curr.label : 'Ma position GPS'),
+              ));
 
     if (_destCoord == null) {
       AppErrorReporter.reportError(

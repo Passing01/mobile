@@ -139,6 +139,11 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
 
       if (locationService.last != null) {
         final p = locationService.last!;
+        ref.read(currentLocationProvider.notifier).updateLocation(
+              p.latitude,
+              p.longitude,
+              'Ma position GPS',
+            );
         final c = _mapController ?? ref.read(mapServiceProvider).controller;
         if (c != null && _following) {
           await c.animateCamera(
@@ -242,13 +247,6 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     final cats = ref.read(selectedCategoriesProvider);
     final mapService = ref.read(mapServiceProvider);
 
-    if (cats.isEmpty) {
-      _placesCancelToken?.cancel();
-      await mapService.showPlaces(const {'type': 'FeatureCollection', 'features': []});
-      ref.read(placesStateProvider.notifier).clear();
-      return;
-    }
-
     _placesCancelToken?.cancel();
     _placesCancelToken = CancelToken();
 
@@ -260,11 +258,12 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       ref.read(placesStateProvider.notifier).setLoading();
 
       final repo = ref.read(placesRepositoryProvider);
+      final catsParam = cats.isNotEmpty ? cats.toList() : null;
       final data = await repo.getPlacesGeoJson(
-        categories: cats.toList(),
+        categories: catsParam,
         bbox: bbox,
         zoom: zoom,
-        limit: 800,
+        limit: 1000,
       );
 
       final features = (data['features'] as List<dynamic>?) ?? [];
@@ -450,11 +449,28 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     ref.read(selectedPlaceProvider.notifier).select(destinationPlace);
     ref.read(selectedRouteModeProvider.notifier).selectMode(mode);
 
+    final locService = ref.read(locationServiceProvider);
+    final lastGps = locService.last;
     final currentLocation = ref.read(currentLocationProvider);
+
+    final double originLat;
+    final double originLon;
+    final String originName;
+
+    if (lastGps != null) {
+      originLat = lastGps.latitude;
+      originLon = lastGps.longitude;
+      originName = 'Ma position GPS';
+    } else {
+      originLat = currentLocation.lat;
+      originLon = currentLocation.lon;
+      originName = currentLocation.label;
+    }
+
     final origin = CoordinateModel(
-      lat: currentLocation.lat,
-      lon: currentLocation.lon,
-      name: currentLocation.label,
+      lat: originLat,
+      lon: originLon,
+      name: originName,
     );
     final destination = CoordinateModel(
       lat: destinationPlace.latitude,
@@ -696,6 +712,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               (next.lat != AppConstants.ouagaCenterLatitude ||
                   next.lon != AppConstants.ouagaCenterLongitude))) {
         mapService.animateCamera(lat: next.lat, lng: next.lon, zoom: 15.5);
+        _refreshPlaces();
       }
     });
 
@@ -782,9 +799,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               if (route != null) {
                 await mapService.setRoute(route);
               }
-              if (ref.read(selectedCategoriesProvider).isNotEmpty) {
-                _refreshPlaces();
-              }
+              await _refreshPlaces();
             },
             onTap: (point, latLng) async {
               await _handleMapTap(point, latLng);
@@ -1653,12 +1668,21 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               onModeSelected: (modeId) {
                 ref.read(selectedRouteModeProvider.notifier).selectMode(modeId);
                 if (selectedPlace != null) {
-                  ref.read(activeRouteProvider.notifier).calculate(
-                        origin: CoordinateModel(
+                  final locService = ref.read(locationServiceProvider);
+                  final lastGps = locService.last;
+                  final origin = (lastGps != null)
+                      ? CoordinateModel(
+                          lat: lastGps.latitude,
+                          lon: lastGps.longitude,
+                          name: 'Ma position GPS',
+                        )
+                      : CoordinateModel(
                           lat: currentLocation.lat,
                           lon: currentLocation.lon,
                           name: currentLocation.label,
-                        ),
+                        );
+                  ref.read(activeRouteProvider.notifier).calculate(
+                        origin: origin,
                         destination: CoordinateModel(
                           lat: selectedPlace.latitude,
                           lon: selectedPlace.longitude,

@@ -92,15 +92,34 @@ class LocationService {
   Future<void> start() async {
     await _sub?.cancel();
 
-    final locationSettings = kIsWeb
-        ? const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 3,
-          )
-        : const LocationSettings(
-            accuracy: LocationAccuracy.bestForNavigation,
-            distanceFilter: 3,
-          );
+    // Récupération instantanée du dernier fix connu du système
+    try {
+      final cached = await Geolocator.getLastKnownPosition();
+      if (cached != null) {
+        last = cached;
+        DebugInfo.instance.updateGpsFix(cached);
+        _ctrl.add(cached);
+      }
+    } catch (_) {}
+
+    final LocationSettings locationSettings;
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      locationSettings = AndroidSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 0,
+        intervalDuration: const Duration(seconds: 1),
+      );
+    } else if (kIsWeb) {
+      locationSettings = const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 0,
+      );
+    } else {
+      locationSettings = const LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 0,
+      );
+    }
 
     _sub = Geolocator.getPositionStream(
       locationSettings: locationSettings,
@@ -148,7 +167,7 @@ class LocationService {
 
   /// Écarte les mauvais points pour la navigation : précision > 50 m ou âge > 10 s
   bool isUsable(Position p) {
-    final age = DateTime.now().difference(p.timestamp).inSeconds;
+    final age = DateTime.now().difference(p.timestamp).inSeconds.abs();
     return p.accuracy <= 50 && age <= 10;
   }
 

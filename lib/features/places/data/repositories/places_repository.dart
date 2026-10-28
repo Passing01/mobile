@@ -135,13 +135,20 @@ class PlacesRepository {
   }
 
   Future<List<Map<String, dynamic>>> _getOfflineFeaturesForCategories(
-    List<String> categories, {
+    List<String>? categories, {
     String? bbox,
   }) async {
     final results = <Map<String, dynamic>>[];
     try {
       final prefs = await SharedPreferences.getInstance();
-      for (final cat in categories) {
+      final catsToRead = (categories != null && categories.isNotEmpty)
+          ? categories
+          : prefs
+              .getKeys()
+              .where((k) => k.startsWith(_categoryCachePrefix))
+              .map((k) => k.substring(_categoryCachePrefix.length))
+              .toList();
+      for (final cat in catsToRead) {
         final key = '$_categoryCachePrefix$cat';
         final raw = prefs.getString(key);
         if (raw != null) {
@@ -160,7 +167,7 @@ class PlacesRepository {
     }
 
     if (results.isEmpty) {
-      return _buildLocalFallbackFeatures(categories);
+      return _buildLocalFallbackFeatures(categories ?? const []);
     }
 
     // Filtrage par BoundingBox si présent
@@ -218,7 +225,7 @@ class PlacesRepository {
   /// En ligne : interroge l'API et met à jour le cache local hors-ligne
   /// Hors-ligne : charge instantanément depuis le stockage local sans bloquer
   Future<Map<String, dynamic>> getPlacesGeoJson({
-    required List<String> categories,
+    List<String>? categories,
     String? bbox,
     String? zone,
     double? lat,
@@ -228,14 +235,16 @@ class PlacesRepository {
     double zoom = 14.0,
     int limit = 800,
   }) async {
-    final sortedCats = List<String>.from(categories)..sort();
-    final cacheKey = 'geojson_${sortedCats.join("_")}_${zone ?? bbox ?? "${lat}_$lng"}';
+    final sortedCats = categories != null ? (List<String>.from(categories)..sort()) : <String>[];
+    final cacheKey = 'geojson_${sortedCats.isEmpty ? "all" : sortedCats.join("_")}_${zone ?? bbox ?? "${lat}_$lng"}';
     try {
       final queryParams = <String, dynamic>{
-        'categories': categories.join(','),
         'limit': limit,
         'zoom': zoom,
       };
+      if (categories != null && categories.isNotEmpty) {
+        queryParams['categories'] = categories.join(',');
+      }
       if (bbox != null) queryParams['bbox'] = bbox;
       if (zone != null) queryParams['zone'] = zone;
       if (lat != null && lng != null) {
@@ -262,10 +271,10 @@ class PlacesRepository {
           } catch (e) {
             AppLogger.w('Impossible de mettre en cache les lieux: $e');
           }
-          final map = <String, dynamic>{'is_offline': false};
-          data.forEach((k, v) => map[k.toString()] = v);
-          return map;
         }
+        final map = <String, dynamic>{'is_offline': false};
+        data.forEach((k, v) => map[k.toString()] = v);
+        return map;
       }
 
       // Si l'API retourne 0 points dans cette boîte, tenter de charger les points hors-ligne enregistrés

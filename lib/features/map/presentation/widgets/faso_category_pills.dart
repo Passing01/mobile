@@ -18,25 +18,33 @@ class FasoCategoryPills extends ConsumerWidget {
         data: (categories) {
           // Filtrer selon isFilter
           final filterableCats = categories.where((c) => c.isFilter).toList();
+          final hasFilters = selectedCategories.isNotEmpty;
 
           return ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             scrollDirection: Axis.horizontal,
-            itemCount: filterableCats.length + (selectedCategories.isNotEmpty ? 1 : 0),
+            itemCount: filterableCats.length + 1,
             separatorBuilder: (context, index) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
-              // Premier élément spécial si des filtres sont actifs : bouton reset / compteur
-              if (selectedCategories.isNotEmpty && index == 0) {
+              if (index == 0) {
+                // Bouton "Tous les lieux" (actif quand aucun filtre spécifique n'est coché)
+                final isAllSelected = !hasFilters;
                 return GestureDetector(
                   onTap: () {
-                    ref.read(selectedCategoriesProvider.notifier).clear();
+                    if (hasFilters) {
+                      ref.read(selectedCategoriesProvider.notifier).clear();
+                    }
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: isAllSelected ? const Color(0xFF0F766E) : const Color(0xFF1E293B),
                       borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: isAllSelected ? Colors.white : const Color(0xFF334155),
+                        width: isAllSelected ? 2 : 1,
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.12),
@@ -48,26 +56,33 @@ class FasoCategoryPills extends ConsumerWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.clear_all_rounded, size: 16, color: Colors.white),
+                        Icon(
+                          isAllSelected ? Icons.place_rounded : Icons.clear_all_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
                         const SizedBox(width: 6),
                         Text(
-                          '$count lieu${count > 1 ? 'x' : ''}',
+                          isAllSelected
+                              ? (count > 0 ? 'Tous ($count)' : 'Tous les lieux')
+                              : '$count lieu${count > 1 ? "x" : ""}',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
                             color: Colors.white,
                           ),
                         ),
-                        const SizedBox(width: 4),
-                        const Icon(Icons.close_rounded, size: 14, color: Colors.white70),
+                        if (hasFilters) ...[
+                          const SizedBox(width: 4),
+                          const Icon(Icons.close_rounded, size: 14, color: Colors.white70),
+                        ],
                       ],
                     ),
                   ),
                 );
               }
 
-              final catIndex = selectedCategories.isNotEmpty ? index - 1 : index;
-              final cat = filterableCats[catIndex];
+              final cat = filterableCats[index - 1];
               final isSelected = selectedCategories.contains(cat.slug);
 
               // Couleurs dynamiques pilotées par la table categories
