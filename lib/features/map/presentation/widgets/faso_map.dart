@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
@@ -123,7 +124,7 @@ class _FasoMapState extends State<FasoMap> {
               zoom: 12.5,
             ),
             compassEnabled: true,
-            myLocationEnabled: true,
+            myLocationEnabled: !kIsWeb,
             myLocationRenderMode: MyLocationRenderMode.normal,
             myLocationTrackingMode: MyLocationTrackingMode.none,
             trackCameraPosition: true,

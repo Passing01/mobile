@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:equatable/equatable.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:qvgestion_mobile/core/config/app_config.dart';
@@ -327,8 +328,13 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
         return;
       }
 
-      // 1. Position instantanée depuis le cache récent (< 50ms)
-      final lastKnown = await Geolocator.getLastKnownPosition();
+      // 1. Position instantanée depuis le cache récent (< 50ms) (non supporté sur le Web)
+      Position? lastKnown;
+      if (!kIsWeb) {
+        try {
+          lastKnown = await Geolocator.getLastKnownPosition();
+        } catch (_) {}
+      }
       if (lastKnown != null) {
         state = LocationState(
           lat: lastKnown.latitude,
@@ -341,13 +347,16 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
 
       // 2. Écoute du flux continu haute précision direct
       _positionStreamSub?.cancel();
+      final streamSettings = kIsWeb
+          ? const LocationSettings(accuracy: LocationAccuracy.high)
+          : AndroidSettings(
+              accuracy: LocationAccuracy.best,
+              distanceFilter: 3,
+              forceLocationManager: true,
+              intervalDuration: const Duration(seconds: 2),
+            );
       _positionStreamSub = Geolocator.getPositionStream(
-        locationSettings: AndroidSettings(
-          accuracy: LocationAccuracy.best,
-          distanceFilter: 3,
-          forceLocationManager: true,
-          intervalDuration: const Duration(seconds: 2),
-        ),
+        locationSettings: streamSettings,
       ).listen((pos) {
         state = LocationState(
           lat: pos.latitude,
@@ -357,14 +366,20 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
         DebugInfo.instance.updateGpsFix(pos);
       });
 
-      // 3. Demande de position GPS précise directe (matériel GPS)
+      // 3. Demande de position GPS précise directe
       try {
+        final locationSettings = kIsWeb
+            ? const LocationSettings(
+                accuracy: LocationAccuracy.high,
+                timeLimit: Duration(seconds: 15),
+              )
+            : AndroidSettings(
+                accuracy: LocationAccuracy.best,
+                timeLimit: const Duration(seconds: 15),
+                forceLocationManager: true,
+              );
         final position = await Geolocator.getCurrentPosition(
-          locationSettings: AndroidSettings(
-            accuracy: LocationAccuracy.best,
-            timeLimit: const Duration(seconds: 15),
-            forceLocationManager: true,
-          ),
+          locationSettings: locationSettings,
         );
 
         state = LocationState(
@@ -395,10 +410,12 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
         }
       }
     } catch (e) {
-      if (e.toString().contains('MissingPluginException') ||
-          e.toString().contains('No implementation found')) {
+      if (kIsWeb ||
+          e.toString().contains('MissingPluginException') ||
+          e.toString().contains('No implementation found') ||
+          e.toString().contains('Unsupported operation')) {
         AppLogger.i(
-          'ℹ️ Service GPS natif en attente. Position Ouaga active.',
+          'ℹ️ Service GPS natif en attente sur cette plateforme. Position Ouaga active.',
         );
       } else {
         AppErrorReporter.reportError(

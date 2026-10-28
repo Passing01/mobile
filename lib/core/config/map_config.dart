@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
@@ -15,12 +16,21 @@ class MapConfig {
     required this.attribution,
   });
 
-  static const defaultFasoLight = 'assets/map/styles/faso-light.json';
-  static const defaultFasoDark = 'assets/map/styles/faso-dark.json';
-  static const defaultFasoSatellite = 'assets/map/styles/faso-satellite.json';
+  static String get defaultFasoLight => kIsWeb
+      ? 'https://tiles.openfreemap.org/styles/liberty'
+      : 'assets/map/styles/faso-light.json';
+
+  static String get defaultFasoDark => kIsWeb
+      ? 'https://tiles.openfreemap.org/styles/dark'
+      : 'assets/map/styles/faso-dark.json';
+
+  static String get defaultFasoSatellite => kIsWeb
+      ? 'https://tiles.openfreemap.org/styles/liberty'
+      : 'assets/map/styles/faso-satellite.json';
+
   static const defaultAttribution = '© OpenStreetMap contributors, © Esri';
 
-  factory MapConfig.defaults() => const MapConfig(
+  factory MapConfig.defaults() => MapConfig(
         styleLight: defaultFasoLight,
         styleDark: defaultFasoDark,
         styleSatellite: defaultFasoSatellite,
