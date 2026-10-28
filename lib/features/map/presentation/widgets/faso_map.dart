@@ -16,6 +16,9 @@ class FasoMap extends StatefulWidget {
     this.onCameraIdle,
     this.attributionText = '© OpenStreetMap contributors',
     this.onAttributionTap,
+    this.myLocationEnabled = false,
+    this.myLocationTrackingMode = MyLocationTrackingMode.none,
+    this.onCameraTrackingDismissed,
   });
 
   /// URL du style servie depuis le backend (ex: https://tiles.openfreemap.org/styles/liberty)
@@ -38,6 +41,15 @@ class FasoMap extends StatefulWidget {
 
   /// Action lors du clic sur l'attribution (ouvre la modale des crédits par défaut)
   final VoidCallback? onAttributionTap;
+
+  /// Affiche le point de position natif (uniquement si permission GPS accordée)
+  final bool myLocationEnabled;
+
+  /// Mode de suivi automatique de la caméra sur la position
+  final MyLocationTrackingMode myLocationTrackingMode;
+
+  /// Déclenché quand l'utilisateur bouge la carte manuellement, désactivant le suivi
+  final VoidCallback? onCameraTrackingDismissed;
 
   @override
   State<FasoMap> createState() => _FasoMapState();
@@ -65,6 +77,9 @@ class _FasoMapState extends State<FasoMap> {
   @override
   void didUpdateWidget(covariant FasoMap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.myLocationTrackingMode != widget.myLocationTrackingMode && _c != null) {
+      _c!.updateMyLocationTrackingMode(widget.myLocationTrackingMode);
+    }
     if (oldWidget.styleUrl != widget.styleUrl) {
       debugPrint('[MAP] Basculement style vers: ${widget.styleUrl}');
       AppLogger.i('[MAP] Basculement style vers: ${widget.styleUrl}');
@@ -124,9 +139,10 @@ class _FasoMapState extends State<FasoMap> {
               zoom: 12.5,
             ),
             compassEnabled: true,
-            myLocationEnabled: !kIsWeb,
+            myLocationEnabled: widget.myLocationEnabled && !kIsWeb,
             myLocationRenderMode: MyLocationRenderMode.normal,
-            myLocationTrackingMode: MyLocationTrackingMode.none,
+            myLocationTrackingMode: widget.myLocationTrackingMode,
+            onCameraTrackingDismissed: widget.onCameraTrackingDismissed,
             trackCameraPosition: true,
             onMapCreated: (c) {
               _c = c;

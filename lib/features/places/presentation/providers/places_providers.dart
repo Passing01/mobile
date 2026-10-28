@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'package:equatable/equatable.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:qvgestion_mobile/core/config/app_config.dart';
 import 'package:qvgestion_mobile/core/config/app_constants.dart';
-import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
-import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
+import 'package:qvgestion_mobile/core/services/location_service.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
@@ -283,8 +281,13 @@ class LocationState extends Equatable {
 }
 
 class CurrentLocationNotifier extends Notifier<LocationState> {
+  StreamSubscription<Position>? _positionStreamSub;
+
   @override
   LocationState build() {
+    ref.onDispose(() {
+      _positionStreamSub?.cancel();
+    });
     return const LocationState(
       lat: AppConstants.ouagaCenterLatitude,
       lon: AppConstants.ouagaCenterLongitude,
@@ -300,130 +303,34 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
     );
   }
 
-  StreamSubscription<Position>? _positionStreamSub;
-
-  /// Récupère la position GPS réelle du smartphone de l'utilisateur
+  /// Récupère la position GPS réelle du smartphone de l'utilisateur via LocationService
   Future<void> fetchRealDeviceLocation() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        AppLogger.w('Service de localisation désactivé sur l\'appareil');
-        return;
-      }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          AppLogger.w('Permission de localisation refusée par l\'utilisateur');
-          return;
-        }
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        AppErrorReporter.reportError(
-          'Permission de localisation refusée définitivement. Activez le GPS dans les paramètres.',
-          tag: 'GPS',
-        );
-        return;
-      }
-
-      // 1. Position instantanée depuis le cache récent (< 50ms) (non supporté sur le Web)
-      Position? lastKnown;
-      if (!kIsWeb) {
-        try {
-          lastKnown = await Geolocator.getLastKnownPosition();
-        } catch (_) {}
-      }
-      if (lastKnown != null) {
-        state = LocationState(
-          lat: lastKnown.latitude,
-          lon: lastKnown.longitude,
-          label: 'Ma position GPS',
-        );
-        DebugInfo.instance.updateGpsFix(lastKnown);
-        AppLogger.i('Position GPS obtenue immédiatement (cache natif): ${lastKnown.latitude}, ${lastKnown.longitude}');
-      }
-
-      // 2. Écoute du flux continu haute précision direct
-      _positionStreamSub?.cancel();
-      final streamSettings = kIsWeb
-          ? const LocationSettings(accuracy: LocationAccuracy.high)
-          : AndroidSettings(
-              accuracy: LocationAccuracy.best,
-              distanceFilter: 3,
-              forceLocationManager: true,
-              intervalDuration: const Duration(seconds: 2),
-            );
-      _positionStreamSub = Geolocator.getPositionStream(
-        locationSettings: streamSettings,
-      ).listen((pos) {
-        state = LocationState(
-          lat: pos.latitude,
-          lon: pos.longitude,
-          label: 'Position GPS précise',
-        );
-        DebugInfo.instance.updateGpsFix(pos);
-      });
-
-      // 3. Demande de position GPS précise directe
-      try {
-        final locationSettings = kIsWeb
-            ? const LocationSettings(
-                accuracy: LocationAccuracy.high,
-                timeLimit: Duration(seconds: 15),
-              )
-            : AndroidSettings(
-                accuracy: LocationAccuracy.best,
-                timeLimit: const Duration(seconds: 15),
-                forceLocationManager: true,
-              );
-        final position = await Geolocator.getCurrentPosition(
-          locationSettings: locationSettings,
-        );
-
-        state = LocationState(
-          lat: position.latitude,
-          lon: position.longitude,
-          label: 'Position GPS précise',
-        );
-        DebugInfo.instance.updateGpsFix(position);
-      } catch (e) {
-        try {
-          final position = await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              timeLimit: Duration(seconds: 10),
-            ),
-          );
+      final locService = ref.read(locationServiceProvider);
+      final status = await locService.ensurePermission();
+      if (status == LocationStatus.ok) {
+        await locService.start();
+        _positionStreamSub?.cancel();
+        _positionStreamSub = locService.stream.listen((pos) {
+          if (!locService.isUsable(pos)) return;
           state = LocationState(
-            lat: position.latitude,
-            lon: position.longitude,
-            label: 'Position GPS réelle',
+            lat: pos.latitude,
+            lon: pos.longitude,
+            label: 'Position GPS précise',
           );
-          DebugInfo.instance.updateGpsFix(position);
-        } catch (innerErr) {
-          AppLogger.w('Point GPS en attente: $innerErr');
-          if (lastKnown != null) {
-            AppLogger.i('Maintien de la dernière position valide.');
-          }
+        });
+
+        if (locService.last != null && locService.isUsable(locService.last!)) {
+          final p = locService.last!;
+          state = LocationState(
+            lat: p.latitude,
+            lon: p.longitude,
+            label: 'Ma position GPS',
+          );
         }
       }
     } catch (e) {
-      if (kIsWeb ||
-          e.toString().contains('MissingPluginException') ||
-          e.toString().contains('No implementation found') ||
-          e.toString().contains('Unsupported operation')) {
-        AppLogger.i(
-          'ℹ️ Service GPS natif en attente sur cette plateforme. Position Ouaga active.',
-        );
-      } else {
-        AppErrorReporter.reportError(
-          'Erreur signal GPS mobile',
-          error: e,
-          tag: 'GPS',
-        );
-      }
+      AppLogger.w('[GPS] Erreur initialisation position: $e');
     }
   }
 }

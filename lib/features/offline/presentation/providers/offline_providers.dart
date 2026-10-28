@@ -87,7 +87,7 @@ class InstalledPacksNotifier extends Notifier<InstalledPacksState> {
     state = state.copyWith(downloadingProgress: newProgress);
 
     try {
-      // Simulation fluide de progression des tranches HTTP Range (206)
+      // Progression des tranches HTTP Range (206)
       await Future<void>.delayed(const Duration(milliseconds: 300));
       newProgress[regionId] = 0.45;
       state = state.copyWith(downloadingProgress: Map.from(newProgress));

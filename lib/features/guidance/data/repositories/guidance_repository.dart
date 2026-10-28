@@ -140,7 +140,7 @@ class GuidanceRepository {
         turnSide = 'straight';
       }
 
-      // Simulation de sélection d'ancre via NarratorV2
+      // Sélection d'ancre via NarratorV2
       final turn = NavigationTurn(s: accumulatedDistance, side: turnSide, cls: 'rue');
       final steps = NarratorV2.narrate(
         turns: [turn],

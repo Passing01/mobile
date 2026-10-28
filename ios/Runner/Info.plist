@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>QV Gestion utilise votre position pour vous localiser sur la carte et afficher les lieux à proximité.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>QV Gestion utilise votre position pour vous guider lors de vos trajets.</string>
 </dict>
 </plist>
