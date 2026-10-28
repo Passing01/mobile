@@ -237,10 +237,13 @@ class ActiveNavigationCard extends StatelessWidget {
                   Tooltip(
                     message: 'Arrêter la navigation',
                     child: ElevatedButton(
+                      key: const Key('btn_stop_active_navigation'),
                       onPressed: onStopNavigation,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFDC2626),
                         foregroundColor: Colors.white,
+                        minimumSize: const Size(0, 40),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),

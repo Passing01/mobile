@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -21,7 +22,11 @@ abstract class MapService {
   MapLibreMapController? get controller;
   Future<void> setRoute(RouteModel? route);
   Future<void> clearRoute();
-  Future<void> moveCamera({required double lat, required double lng, double zoom = 14.0});
+  Future<void> moveCamera({
+    required double lat,
+    required double lng,
+    double zoom = 14.0,
+  });
   Future<void> animateCamera({
     required double lat,
     required double lng,
@@ -44,6 +49,7 @@ abstract class MapService {
   Future<void> clearDestinationPin();
   Future<void> zoomIn(LatLng geo, {double delta = 2.0});
   Future<void> updateUserLocation(double lat, double lon);
+  Future<void> setTransportMode(String? mode);
   Future<void> setSelectedPlace(PlaceModel? place);
   MapTheme get currentTheme;
   void dispose();
@@ -81,11 +87,13 @@ class MapLibreMapService implements MapService {
   static const String userLocationAuraLayerId = 'fasonav-user-location-aura';
   static const String userLocationRingLayerId = 'fasonav-user-location-ring';
   static const String userLocationCoreLayerId = 'fasonav-user-location-core';
+  static const String userLocationModeLayerId = 'fasonav-user-location-mode';
 
   static const String selectedPlaceSourceId = 'fasonav-selected-place-source';
   static const String selectedPlaceAuraLayerId = 'fasonav-selected-place-aura';
   static const String selectedPlacePinLayerId = 'fasonav-selected-place-pin';
-  static const String selectedPlaceLabelLayerId = 'fasonav-selected-place-label';
+  static const String selectedPlaceLabelLayerId =
+      'fasonav-selected-place-label';
 
   // Couches officielles Étape 5 (Halo et Destination libre)
   static const String selectedSourceId = 'selected';
@@ -97,7 +105,17 @@ class MapLibreMapService implements MapService {
 
   double? _userLat;
   double? _userLon;
+  String? _transportMode;
   PlaceModel? _selectedPlace;
+
+  String _modeIconFor(String? mode) {
+    if (mode == null || mode.isEmpty) return '';
+    final m = mode.toLowerCase().trim();
+    if (m == 'pied' || m == 'pedestrian' || m == 'walk') return 'mode-pied';
+    if (m == 'voiture' || m == 'auto' || m == 'car') return 'mode-voiture';
+    if (m == 'velo' || m == 'bicycle' || m == 'bike') return 'mode-velo';
+    return 'mode-moto';
+  }
 
   @override
   bool get isReady => _controller != null && _layersConfigured;
@@ -247,7 +265,8 @@ class MapLibreMapService implements MapService {
       } catch (_) {}
 
       // 1. Initialisation de la source des lieux avec grappes (clustering conforme Étape 4)
-      final placesData = _cachedPlacesGeoJson ?? _buildPlacesGeoJson(_cachedPlaces);
+      final placesData =
+          _cachedPlacesGeoJson ?? _buildPlacesGeoJson(_cachedPlaces);
       await _safeAddGeoJsonSource(
         c,
         existingSources,
@@ -279,7 +298,7 @@ class MapLibreMapService implements MapService {
           ],
         ),
         filter: [Expressions.has, 'point_count'],
-        enableInteraction: true,
+        enableInteraction: false,
       );
 
       // Couche du libellé chiffré au centre de la grappe
@@ -317,15 +336,28 @@ class MapLibreMapService implements MapService {
         const SymbolLayerProperties(
           iconImage: [
             Expressions.match,
-            [Expressions.coalesce, [Expressions.get, 'category_slug'], [Expressions.get, 'category'], ''],
-            'pharmacie', 'pin-pharmacie',
-            'station-service', 'pin-station-service',
-            'maquis-restaurant', 'pin-maquis-restaurant',
-            'hopital-sante', 'pin-hopital-sante',
-            'banque-distributeur', 'pin-banque-distributeur',
-            'administration', 'pin-administration',
-            'ecole-universite', 'pin-ecole-universite',
-            'marche-commerce', 'pin-marche-commerce',
+            [
+              Expressions.coalesce,
+              [Expressions.get, 'category_slug'],
+              [Expressions.get, 'category'],
+              '',
+            ],
+            'pharmacie',
+            'pin-pharmacie',
+            'station-service',
+            'pin-station-service',
+            'maquis-restaurant',
+            'pin-maquis-restaurant',
+            'hopital-sante',
+            'pin-hopital-sante',
+            'banque-distributeur',
+            'pin-banque-distributeur',
+            'administration',
+            'pin-administration',
+            'ecole-universite',
+            'pin-ecole-universite',
+            'marche-commerce',
+            'pin-marche-commerce',
             'pin-default',
           ],
           iconSize: 0.70,
@@ -342,12 +374,18 @@ class MapLibreMapService implements MapService {
           textAllowOverlap: false,
           textOptional: true,
         ),
-        filter: ['!', [Expressions.has, 'point_count']],
-        enableInteraction: true,
+        filter: [
+          '!',
+          [Expressions.has, 'point_count'],
+        ],
+        enableInteraction: false,
       );
 
       // Couche du halo de sélection (conforme Étape 5 : rayon 22, transparent centre, blanc 4px sous places-points)
-      await _safeAddGeoJsonSource(c, existingSources, selectedSourceId, const {'type': 'FeatureCollection', 'features': []});
+      await _safeAddGeoJsonSource(c, existingSources, selectedSourceId, const {
+        'type': 'FeatureCollection',
+        'features': [],
+      });
       await _safeAddCircleLayer(
         c,
         existingLayers,
@@ -364,7 +402,12 @@ class MapLibreMapService implements MapService {
       );
 
       // Source et couches de l'épingle « Destination » (appui long libre avec confirmation)
-      await _safeAddGeoJsonSource(c, existingSources, destinationPinSourceId, const {'type': 'FeatureCollection', 'features': []});
+      await _safeAddGeoJsonSource(
+        c,
+        existingSources,
+        destinationPinSourceId,
+        const {'type': 'FeatureCollection', 'features': []},
+      );
       await _safeAddCircleLayer(
         c,
         existingLayers,
@@ -410,7 +453,12 @@ class MapLibreMapService implements MapService {
 
       // 2. Initialisation de la source et des couches de tracé d'itinéraire (liseré de contraste + intérieur)
       final routeGeoJson = _buildRouteGeoJson(_cachedRoute);
-      await _safeAddGeoJsonSource(c, existingSources, routeSourceId, routeGeoJson);
+      await _safeAddGeoJsonSource(
+        c,
+        existingSources,
+        routeSourceId,
+        routeGeoJson,
+      );
 
       // 2.1 Couche de liseré de contraste (blanc en clair, très sombre en nuit)
       await _safeAddLineLayer(
@@ -450,7 +498,12 @@ class MapLibreMapService implements MapService {
         _selectedPlace?.longitude,
         properties: {'title': _selectedPlace?.nom ?? ''},
       );
-      await _safeAddGeoJsonSource(c, existingSources, selectedPlaceSourceId, selectedGeoJson);
+      await _safeAddGeoJsonSource(
+        c,
+        existingSources,
+        selectedPlaceSourceId,
+        selectedGeoJson,
+      );
 
       await _safeAddCircleLayer(
         c,
@@ -496,8 +549,15 @@ class MapLibreMapService implements MapService {
         enableInteraction: false,
       );
 
-      // 4. Initialisation de la source et couches de la position de l'utilisateur (GPS Puck)
-      final userGeoJson = _buildPointGeoJson(_userLat, _userLon, properties: {'title': 'Ma position'});
+      // 4. Initialisation de la source et couches de la position de l'utilisateur (GPS Puck + Avatar Mode)
+      final userGeoJson = _buildPointGeoJson(
+        _userLat,
+        _userLon,
+        properties: {
+          'title': 'Ma position',
+          'mode_icon': _modeIconFor(_transportMode),
+        },
+      );
       await _safeAddGeoJsonSource(c, existingSources, userLocationSourceId, userGeoJson);
 
       await _safeAddCircleLayer(
@@ -532,15 +592,29 @@ class MapLibreMapService implements MapService {
         existingLayers,
         userLocationSourceId,
         userLocationCoreLayerId,
-        const CircleLayerProperties(
-          circleColor: '#1A73E8',
-          circleRadius: 5.5,
+        const CircleLayerProperties(circleColor: '#1A73E8', circleRadius: 5.5),
+        enableInteraction: false,
+      );
+
+      await _safeAddSymbolLayer(
+        c,
+        existingLayers,
+        userLocationSourceId,
+        userLocationModeLayerId,
+        const SymbolLayerProperties(
+          iconImage: [Expressions.get, 'mode_icon'],
+          iconSize: 0.78,
+          iconAllowOverlap: true,
+          iconIgnorePlacement: true,
         ),
+        filter: ['!=', [Expressions.get, 'mode_icon'], ''],
         enableInteraction: false,
       );
 
       _layersConfigured = true;
-      AppLogger.i('Couches MapLibre configurées avec succès (Thème: ${theme.isDark ? "Dark" : "Light"})');
+      AppLogger.i(
+        'Couches MapLibre configurées avec succès (Thème: ${theme.isDark ? "Dark" : "Light"})',
+      );
     } catch (e) {
       AppLogger.w('Initialisation couches MapLibre: $e');
     }
@@ -598,10 +672,10 @@ class MapLibreMapService implements MapService {
     if (c == null || !_layersConfigured) return;
 
     try {
-      await c.setGeoJsonSource(
-        routeSourceId,
-        const {'type': 'FeatureCollection', 'features': []},
-      );
+      await c.setGeoJsonSource(routeSourceId, const {
+        'type': 'FeatureCollection',
+        'features': [],
+      });
     } catch (e) {
       AppLogger.d('Effacement tracé itinéraire: $e');
     }
@@ -615,10 +689,27 @@ class MapLibreMapService implements MapService {
     if (c == null || !_layersConfigured) return;
 
     try {
-      final geojson = _buildPointGeoJson(lat, lon, properties: {'title': 'Ma position'});
+      final geojson = _buildPointGeoJson(
+        lat,
+        lon,
+        properties: {
+          'title': 'Ma position',
+          'mode_icon': _modeIconFor(_transportMode),
+        },
+      );
       await c.setGeoJsonSource(userLocationSourceId, geojson);
     } catch (e) {
       AppLogger.d('Mise à jour position utilisateur: $e');
+    }
+  }
+
+  @override
+  Future<void> setTransportMode(String? mode) async {
+    _transportMode = mode;
+    final lat = _userLat;
+    final lon = _userLon;
+    if (lat != null && lon != null) {
+      await updateUserLocation(lat, lon);
     }
   }
 
@@ -652,10 +743,7 @@ class MapLibreMapService implements MapService {
     try {
       await c.moveCamera(
         CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(lat, lng),
-            zoom: zoom.clamp(3.0, 20.0),
-          ),
+          CameraPosition(target: LatLng(lat, lng), zoom: zoom.clamp(3.0, 20.0)),
         ),
       );
     } catch (e) {
@@ -732,11 +820,9 @@ class MapLibreMapService implements MapService {
         height: 72.0,
       );
 
-      final features = await c.queryRenderedFeaturesInRect(
-        touchBox,
-        [placesPointsLayerId],
-        null,
-      );
+      final features = await c.queryRenderedFeaturesInRect(touchBox, [
+        placesPointsLayerId,
+      ], null);
 
       if (features.isNotEmpty) {
         final feature = features.first;
@@ -769,22 +855,23 @@ class MapLibreMapService implements MapService {
   }
 
   @override
-  Future<List<Map<String, dynamic>>> queryTapFeatures(Point<double> point) async {
+  Future<List<Map<String, dynamic>>> queryTapFeatures(
+    Point<double> point,
+  ) async {
     final c = _controller;
     if (c == null || !_layersConfigured) return [];
 
     try {
       final rect = Rect.fromCenter(
-        center: Offset(point.x, point.y),
-        width: 48.0,
-        height: 48.0,
+        center: Offset(point.x, point.y - 8.0),
+        width: 56.0,
+        height: 64.0,
       );
 
-      final raw = await c.queryRenderedFeaturesInRect(
-        rect,
-        [placesPointsLayerId, placesClusterLayerId],
-        null,
-      );
+      final raw = await c.queryRenderedFeaturesInRect(rect, [
+        placesPointsLayerId,
+        placesClusterLayerId,
+      ], null);
 
       final feats = <Map<String, dynamic>>[];
       for (final e in raw) {
@@ -846,7 +933,7 @@ class MapLibreMapService implements MapService {
               'coordinates': [geo.longitude, geo.latitude],
             },
             'properties': {'title': 'Destination'},
-          }
+          },
         ],
       });
     } catch (e) {
@@ -927,10 +1014,7 @@ class MapLibreMapService implements MapService {
 
   Map<String, dynamic> _buildRouteGeoJson(RouteModel? route) {
     if (route == null || route.geometry.length < 2) {
-      return const {
-        'type': 'FeatureCollection',
-        'features': [],
-      };
+      return const {'type': 'FeatureCollection', 'features': []};
     }
 
     final coords = <List<double>>[];
@@ -948,25 +1032,20 @@ class MapLibreMapService implements MapService {
       'features': [
         {
           'type': 'Feature',
-          'geometry': {
-            'type': 'LineString',
-            'coordinates': coords,
-          },
-          'properties': {
-            'mode': route.mode,
-            'distance': route.distanceMeters,
-          },
+          'geometry': {'type': 'LineString', 'coordinates': coords},
+          'properties': {'mode': route.mode, 'distance': route.distanceMeters},
         },
       ],
     };
   }
 
-  Map<String, dynamic> _buildPointGeoJson(double? lat, double? lon, {Map<String, dynamic>? properties}) {
+  Map<String, dynamic> _buildPointGeoJson(
+    double? lat,
+    double? lon, {
+    Map<String, dynamic>? properties,
+  }) {
     if (lat == null || lon == null || !lat.isFinite || !lon.isFinite) {
-      return const {
-        'type': 'FeatureCollection',
-        'features': [],
-      };
+      return const {'type': 'FeatureCollection', 'features': []};
     }
     return {
       'type': 'FeatureCollection',
@@ -978,7 +1057,7 @@ class MapLibreMapService implements MapService {
             'coordinates': [lon, lat],
           },
           'properties': properties ?? {},
-        }
+        },
       ],
     };
   }

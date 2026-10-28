@@ -302,6 +302,18 @@ class CurrentLocationNotifier extends Notifier<LocationState> {
   }
 
   void updateLocation(double lat, double lon, [String? label]) {
+    final prev = state;
+    final isPrevDefault = (prev.lat - AppConstants.ouagaCenterLatitude).abs() < 1e-5 &&
+        (prev.lon - AppConstants.ouagaCenterLongitude).abs() < 1e-5;
+    if (!isPrevDefault) {
+      final dLat = (lat - prev.lat) * 111000.0;
+      final dLon = (lon - prev.lon) * 108000.0;
+      final distSq = dLat * dLat + dLon * dLon;
+      // Ignore micro-bruit thermique GPS stationnaire (< 4 mètres)
+      if (distSq < 16.0 && (label == null || label == prev.label)) {
+        return;
+      }
+    }
     state = LocationState(
       lat: lat,
       lon: lon,

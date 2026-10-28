@@ -73,6 +73,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
 
   // Fiche détaillée du lieu sélectionné (Étape 5)
   String? _activePlaceSheetId;
+  PlaceModel? _activeTappedPlace;
 
   // Suivi GPS et permissions (Étape 6)
   bool _permissionOk = false;
@@ -248,35 +249,41 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     final mapService = ref.read(mapServiceProvider);
 
     _placesCancelToken?.cancel();
-    _placesCancelToken = CancelToken();
+      final myToken = CancelToken();
+      _placesCancelToken = myToken;
 
-    try {
-      final b = await c.getVisibleRegion();
-      final bbox = '${b.southwest.longitude},${b.southwest.latitude},${b.northeast.longitude},${b.northeast.latitude}';
-      final zoom = c.cameraPosition?.zoom ?? 14.0;
+      try {
+        final b = await c.getVisibleRegion();
+        final bbox = '${b.southwest.longitude},${b.southwest.latitude},${b.northeast.longitude},${b.northeast.latitude}';
+        final zoom = c.cameraPosition?.zoom ?? 14.0;
 
-      ref.read(placesStateProvider.notifier).setLoading();
+        ref.read(placesStateProvider.notifier).setLoading();
 
-      final repo = ref.read(placesRepositoryProvider);
-      final catsParam = cats.isNotEmpty ? cats.toList() : null;
-      final data = await repo.getPlacesGeoJson(
-        categories: catsParam,
-        bbox: bbox,
-        zoom: zoom,
-        limit: 1000,
-      );
+        final repo = ref.read(placesRepositoryProvider);
+        final catsParam = cats.isNotEmpty ? cats.toList() : null;
+        final data = await repo.getPlacesGeoJson(
+          categories: catsParam,
+          bbox: bbox,
+          zoom: zoom,
+          limit: 1000,
+        );
 
-      final features = (data['features'] as List<dynamic>?) ?? [];
-      final n = features.length;
-      final meta = data['meta'] as Map<String, dynamic>?;
-      final truncated = meta?['truncated'] == true;
-      final isOffline = data['is_offline'] == true;
+        if (_placesCancelToken != myToken) return;
 
-      AppLogger.i('[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline)');
-      debugPrint('[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline)');
-      DebugInfo.instance.setLastApiError(null);
+        final features = (data['features'] as List<dynamic>?) ?? [];
+        final n = features.length;
+        final meta = data['meta'] as Map<String, dynamic>?;
+        final truncated = meta?['truncated'] == true;
+        final isOffline = data['is_offline'] == true;
 
-      await mapService.showPlaces(data);
+        AppLogger.i('[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline)');
+        debugPrint('[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline)');
+        DebugInfo.instance.setLastApiError(null);
+
+        // Ne pas vider la carte si aucun filtre n'est actif et que la réponse transitoire est vide
+        if (n > 0 || cats.isNotEmpty) {
+          await mapService.showPlaces(data);
+        }
 
       final placesList = <PlaceModel>[];
       for (final f in features) {
@@ -435,6 +442,26 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     }
   }
 
+  void _cancelRouteAndNavigation() {
+    _stopNavigationSimulation();
+    final mapService = ref.read(mapServiceProvider);
+    mapService.clearRoute();
+    mapService.clearDestinationPin();
+    mapService.clearHighlight();
+    mapService.setTransportMode(null);
+    ref.read(activeEnrichedRouteProvider.notifier).clear();
+    ref.read(currentManeuverIndexProvider.notifier).reset();
+    ref.read(activeRouteProvider.notifier).clear();
+    ref.read(selectedPlaceProvider.notifier).clear();
+    if (mounted) {
+      setState(() {
+        _activePlaceSheetId = null;
+        _activeTappedPlace = null;
+      });
+    }
+    ref.read(mapScreenStateProvider.notifier).toExplore();
+  }
+
   void _startRouteCalculation({
     required PlaceModel destinationPlace,
     required String mode,
@@ -446,6 +473,23 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       LatLng(destinationPlace.latitude, destinationPlace.longitude),
       source: source,
     );
+
+    final mapService = ref.read(mapServiceProvider);
+    if (source != 'appui long') {
+      mapService.clearDestinationPin();
+    }
+    mapService.clearHighlight();
+    mapService.setTransportMode(mode);
+
+    if (mounted) {
+      setState(() {
+        _activePlaceSheetId = null;
+        _activeTappedPlace = null;
+        // Désactiver le verrouillage caméra pour laisser l'utilisateur explorer le tracé librement (comme Google Maps / Waze)
+        _following = false;
+      });
+    }
+
     ref.read(selectedPlaceProvider.notifier).select(destinationPlace);
     ref.read(selectedRouteModeProvider.notifier).selectMode(mode);
 
@@ -489,10 +533,26 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   void _closePlaceSheet() {
     setState(() {
       _activePlaceSheetId = null;
+      _activeTappedPlace = null;
     });
     ref.read(selectedPlaceProvider.notifier).clear();
     final mapService = ref.read(mapServiceProvider);
     mapService.clearHighlight();
+  }
+
+  PlaceModel? _findClosestPlaceInMemory(maplibre.LatLng geo, {double maxDistanceM = 45.0}) {
+    final places = ref.read(placesStateProvider).placesList;
+    if (places.isEmpty) return null;
+    PlaceModel? closest;
+    double bestDist = maxDistanceM;
+    for (final pl in places) {
+      final d = _calculateApproxDistance(geo.latitude, geo.longitude, pl.latitude, pl.longitude);
+      if (d <= bestDist) {
+        bestDist = d;
+        closest = pl;
+      }
+    }
+    return closest;
   }
 
   Map<String, dynamic> _closestTarget(List<Map<String, dynamic>> feats, maplibre.LatLng geo) {
@@ -536,6 +596,17 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     debugPrint('[TAP] ${geo.latitude},${geo.longitude} -> ${feats.length} élément(s)');
 
     if (feats.isEmpty) {
+      final memoryMatch = _findClosestPlaceInMemory(geo, maxDistanceM: 42.0);
+      if (memoryMatch != null) {
+        final memId = memoryMatch.uuid ?? memoryMatch.id.toString();
+        AppLogger.i('[TAP] lieu trouvé en mémoire proche : ${memoryMatch.nom} (id: $memId)');
+        await mapService.highlightFeature(memoryMatch.toGeoJsonFeature());
+        setState(() {
+          _activePlaceSheetId = memId;
+          _activeTappedPlace = memoryMatch;
+        });
+        return;
+      }
       // 5. Vide touché : ne rien faire, mais écrire une ligne de journal
       // Plus aucune « Destination sur la carte » n'apparaît après un simple toucher
       return;
@@ -580,10 +651,16 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     AppLogger.i('[TAP] lieu sélectionné : ${props?['name'] ?? props?['nom']} (id: $id)');
     debugPrint('[TAP] lieu sélectionné : ${props?['name'] ?? props?['nom']} (id: $id)');
 
+    PlaceModel? tappedPlace;
+    try {
+      tappedPlace = PlaceModel.fromGeoJsonFeature(best);
+    } catch (_) {}
+
     // 4. Lieu touché : mettre un halo autour du point, puis ouvrir la fiche
     await mapService.highlightFeature(best);
     setState(() {
       _activePlaceSheetId = id;
+      _activeTappedPlace = tappedPlace;
     });
   }
 
@@ -592,6 +669,21 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     debugPrint('[LONG_PRESS] ${geo.latitude},${geo.longitude}');
 
     final mapService = ref.read(mapServiceProvider);
+
+    // Vérifier si l'appui long a été fait directement sur un lieu nommé (ex: école, pharmacie)
+    PlaceModel? nearbyNamedPlace = _findClosestPlaceInMemory(geo, maxDistanceM: 45.0);
+    if (nearbyNamedPlace == null) {
+      final feats = await mapService.queryTapFeatures(p);
+      for (final f in feats) {
+        if ((f['properties'] as Map?)?['point_count'] == null) {
+          try {
+            nearbyNamedPlace = PlaceModel.fromGeoJsonFeature(f);
+            break;
+          } catch (_) {}
+        }
+      }
+    }
+
     // 6. Appui long : poser une épingle « Destination » et demander confirmation (« Aller ici ? »)
     await mapService.dropDestinationPin(geo);
 
@@ -620,6 +712,13 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               'Aller ici ?',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)),
             ),
+            if (nearbyNamedPlace != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                nearbyNamedPlace.nom,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF0F766E)),
+              ),
+            ],
             const SizedBox(height: 6),
             Text(
               'Coordonnées : ${geo.latitude.toStringAsFixed(5)}, ${geo.longitude.toStringAsFixed(5)}',
@@ -638,6 +737,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0F766E),
               foregroundColor: Colors.white,
+              minimumSize: const Size(0, 40),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -648,21 +748,30 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     );
 
     if (confirmed == true) {
-      // Démarre l'itinéraire avec source: 'appui long'
-      final destPlace = PlaceModel(
-        id: DateTime.now().millisecondsSinceEpoch,
-        nom: 'Destination libre',
-        categorieId: 0,
-        latitude: geo.latitude,
-        longitude: geo.longitude,
-        quartier: 'Ouagadougou',
-        adresse: '${geo.latitude.toStringAsFixed(4)}, ${geo.longitude.toStringAsFixed(4)}',
-      );
-      _startRouteCalculation(
-        destinationPlace: destPlace,
-        mode: 'motorcycle',
-        source: 'appui long',
-      );
+      if (nearbyNamedPlace != null) {
+        await mapService.clearDestinationPin();
+        _startRouteCalculation(
+          destinationPlace: nearbyNamedPlace,
+          mode: 'motorcycle',
+          source: 'lieu touché',
+        );
+      } else {
+        // Démarre l'itinéraire avec source: 'appui long'
+        final destPlace = PlaceModel(
+          id: DateTime.now().millisecondsSinceEpoch,
+          nom: 'Destination choisie',
+          categorieId: 0,
+          latitude: geo.latitude,
+          longitude: geo.longitude,
+          quartier: 'Ouagadougou',
+          adresse: '${geo.latitude.toStringAsFixed(4)}, ${geo.longitude.toStringAsFixed(4)}',
+        );
+        _startRouteCalculation(
+          destinationPlace: destPlace,
+          mode: 'motorcycle',
+          source: 'appui long',
+        );
+      }
     } else {
       // Refuser la retire
       await mapService.clearDestinationPin();
@@ -687,18 +796,10 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       }
     });
 
-    // Synchronisation des lieux à proximité vers MapService
-    ref.listen(nearbyPlacesProvider, (prev, next) {
-      final places = next.value;
-      if (places != null && places.isNotEmpty) {
-        mapService.setPlaces(places);
-      }
-    });
-
     // Synchronisation lieu sélectionné vers MapService (dépose le pin)
     ref.listen(selectedPlaceProvider, (prev, next) {
       mapService.setSelectedPlace(next);
-      if (next != null) {
+      if (next != null && ref.read(mapScreenStateProvider) == MapScreenState.explore) {
         mapService.animateCamera(lat: next.latitude, lng: next.longitude, zoom: 15.5);
       }
     });
@@ -789,11 +890,6 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               final lastGeoJson = ref.read(placesStateProvider).lastGeoJson;
               if ((lastGeoJson['features'] as List?)?.isNotEmpty == true) {
                 await mapService.showPlaces(lastGeoJson);
-              } else {
-                final places = ref.read(nearbyPlacesProvider).value ?? [];
-                if (places.isNotEmpty) {
-                  await mapService.setPlaces(places);
-                }
               }
               final route = ref.read(activeRouteProvider).value;
               if (route != null) {
@@ -990,8 +1086,14 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               child: _buildActiveNavigationTopBar(),
             ),
 
+          // 2.1 BANNIÈRE COMPACTE D'APERÇU D'ITINÉRAIRE (Écran 2 : laisse la carte grande ouverte)
+          if (screenState == MapScreenState.routeSelection)
+            SafeArea(
+              child: _buildRoutePreviewTopBar(selectedPlace),
+            ),
+
           // 3. ÉLÉMENTS FLOTTANTS SUPÉRIEURS (FASO NAV Header, Search, Ticker, Category Pills)
-          if (screenState != MapScreenState.activeNavigation)
+          if (screenState == MapScreenState.explore)
             SafeArea(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1388,6 +1490,118 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     );
   }
 
+  IconData _modeIconData(String mode) {
+    final m = mode.toLowerCase();
+    if (m == 'pied' || m == 'pedestrian') return Icons.directions_walk_rounded;
+    if (m == 'voiture' || m == 'auto') return Icons.directions_car_rounded;
+    if (m == 'velo' || m == 'bicycle') return Icons.pedal_bike_rounded;
+    return Icons.two_wheeler_rounded;
+  }
+
+  String _modeLabelFr(String mode) {
+    final m = mode.toLowerCase();
+    if (m == 'pied' || m == 'pedestrian') return 'À PIED';
+    if (m == 'voiture' || m == 'auto') return 'VOITURE';
+    if (m == 'velo' || m == 'bicycle') return 'VÉLO';
+    return 'MOTO';
+  }
+
+  Widget _buildRoutePreviewTopBar(PlaceModel? selectedPlace) {
+    final selectedMode = ref.watch(selectedRouteModeProvider);
+    final activeRoute = ref.watch(activeRouteProvider).value;
+    final destName = selectedPlace?.nom ?? 'Destination';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              _modeIconData(selectedMode),
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF16A34A),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _modeLabelFr(selectedMode),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    if (activeRoute != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        '${activeRoute.durationFormatted} • ${activeRoute.distanceFormatted}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Vers $destName',
+                  style: const TextStyle(
+                    color: Color(0xFFE2E8F0),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            key: const Key('btn_top_cancel_route'),
+            onPressed: _cancelRouteAndNavigation,
+            icon: const Icon(Icons.close_rounded, color: Colors.white, size: 22),
+            tooltip: 'Annuler l\'itinéraire',
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActiveNavigationTopBar() {
     final currentEnriched = ref.watch(currentEnrichedManeuverProvider);
     final activeLang = ref.watch(guidanceLanguageProvider);
@@ -1445,13 +1659,20 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                         color: const Color(0xFF16A34A),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(
-                        selectedMode.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(_modeIconData(selectedMode), color: Colors.white, size: 12),
+                          const SizedBox(width: 4),
+                          Text(
+                            _modeLabelFr(selectedMode),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -1497,6 +1718,15 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             icon: const Icon(Icons.volume_up_rounded, color: AppColors.primaryLight, size: 24),
             tooltip: 'Répéter la consigne vocale',
           ),
+          IconButton(
+            key: const Key('btn_top_stop_navigation'),
+            onPressed: () {
+              _cancelRouteAndNavigation();
+              AppSnackbar.showInfo(context, message: 'Navigation terminée');
+            },
+            icon: const Icon(Icons.close_rounded, color: Color(0xFFF87171), size: 24),
+            tooltip: 'Quitter l\'itinéraire',
+          ),
         ],
       ),
     );
@@ -1513,6 +1743,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         if (_activePlaceSheetId != null) {
           return PlaceDetailSheet(
             placeId: _activePlaceSheetId!,
+            initialPlace: _activeTappedPlace,
             onClose: _closePlaceSheet,
             onNavigate: (place, source) {
               _startRouteCalculation(
@@ -1611,10 +1842,10 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
 
         return multiRoutesAsync.when(
           data: (routes) {
-            final motoRoute = routes['motorcycle'];
-            final autoRoute = routes['auto'];
-            final veloRoute = routes['bicycle'];
-            final pietonRoute = routes['pedestrian'];
+            final motoRoute = routes['motorcycle'] ?? routes['moto'];
+            final autoRoute = routes['auto'] ?? routes['voiture'];
+            final veloRoute = routes['bicycle'] ?? routes['velo'] ?? routes['pied'];
+            final pietonRoute = routes['pedestrian'] ?? routes['pied'];
 
             final options = [
               RouteModeOption(
@@ -1667,7 +1898,11 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               selectedModeId: selectedMode,
               onModeSelected: (modeId) {
                 ref.read(selectedRouteModeProvider.notifier).selectMode(modeId);
-                if (selectedPlace != null) {
+                ref.read(mapServiceProvider).setTransportMode(modeId);
+                final precalculated = routes[modeId];
+                if (precalculated != null) {
+                  ref.read(activeRouteProvider.notifier).setRoute(precalculated);
+                } else if (selectedPlace != null) {
                   final locService = ref.read(locationServiceProvider);
                   final lastGps = locService.last;
                   final origin = (lastGps != null)
@@ -1692,12 +1927,21 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                       );
                 }
               },
-              onBack: () {
-                _stopNavigationSimulation();
-                ref.read(mapScreenStateProvider.notifier).toExplore();
-              },
+              onBack: _cancelRouteAndNavigation,
               onConfirm: () async {
+                final selectedModeNow = ref.read(selectedRouteModeProvider);
+                ref.read(mapServiceProvider).setTransportMode(selectedModeNow);
                 ref.read(mapScreenStateProvider.notifier).toActiveNavigation();
+                final locService = ref.read(locationServiceProvider);
+                final p = locService.last;
+                if (p != null) {
+                  setState(() => _following = true);
+                  ref.read(mapServiceProvider).animateCamera(
+                        lat: p.latitude,
+                        lng: p.longitude,
+                        zoom: 17.0,
+                      );
+                }
                 final route = ref.read(activeRouteProvider).value;
                 final activeLang = ref.read(guidanceLanguageProvider);
                 if (route != null) {
@@ -1752,8 +1996,10 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         final currentStepIndex = ref.watch(currentManeuverIndexProvider);
         final activeLang = ref.watch(guidanceLanguageProvider);
 
-        final totalSteps = enrichedRoute?.enrichedManeuvers.length ??
-            (route?.maneuvers.length ?? 1);
+        final rawSteps = (enrichedRoute?.enrichedManeuvers.isNotEmpty == true)
+            ? enrichedRoute!.enrichedManeuvers.length
+            : (route?.maneuvers.isNotEmpty == true ? route!.maneuvers.length : 1);
+        final totalSteps = rawSteps < 1 ? 1 : rawSteps;
         final currentStep = (currentStepIndex + 1).clamp(1, totalSteps);
 
         final nextInstruction = currentEnriched?.localizedInstruction ??
@@ -1837,11 +2083,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             ReportIncidentModal.show(context);
           },
           onStopNavigation: () {
-            _stopNavigationSimulation();
-            ref.read(activeEnrichedRouteProvider.notifier).clear();
-            ref.read(currentManeuverIndexProvider.notifier).reset();
-            ref.read(mapScreenStateProvider.notifier).toExplore();
-            ref.read(activeRouteProvider.notifier).clear();
+            _cancelRouteAndNavigation();
             AppSnackbar.showInfo(context, message: 'Navigation terminée');
           },
         );

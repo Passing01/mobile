@@ -5,6 +5,7 @@ import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
 import 'package:qvgestion_mobile/core/services/location_service.dart';
+import 'package:qvgestion_mobile/core/services/map_service.dart';
 import 'package:qvgestion_mobile/core/services/route_service.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
@@ -495,6 +496,8 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
                           onPressed: () async {
                             final activeLang =
                                 ref.read(guidanceLanguageProvider);
+                            final selectedModeNow =
+                                ref.read(selectedRouteModeProvider);
 
                             final destLat = _destCoord?.lat ??
                                 (route.geometry.isNotEmpty
@@ -505,10 +508,16 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
                                     ? route.geometry.last[0]
                                     : 0.0);
 
+                            final mapService = ref.read(mapServiceProvider);
+                            await mapService.clearDestinationPin();
+                            await mapService.setTransportMode(selectedModeNow);
+
                             ref.read(selectedPlaceProvider.notifier).select(
                                   PlaceModel(
                                     id: 777777,
-                                    nom: _destController.text,
+                                    nom: _destController.text.isNotEmpty
+                                        ? _destController.text
+                                        : (_destCoord?.name ?? 'Destination'),
                                     categorieId: 1,
                                     latitude: destLat,
                                     longitude: destLon,
@@ -545,6 +554,7 @@ class _RoutesScreenState extends ConsumerState<RoutesScreen> {
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
+                            minimumSize: const Size(0, 42),
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 10),
                             shape: RoundedRectangleBorder(

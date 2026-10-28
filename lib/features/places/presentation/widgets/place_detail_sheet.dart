@@ -11,6 +11,7 @@ import 'package:qvgestion_mobile/features/places/presentation/providers/places_p
 /// et 3 boutons d'action : « Itinéraire », « Appeler », « Signaler un problème ».
 class PlaceDetailSheet extends ConsumerWidget {
   final String placeId;
+  final PlaceModel? initialPlace;
   final VoidCallback onClose;
   final void Function(PlaceModel place, String source) onNavigate;
   final VoidCallback? onReport;
@@ -18,6 +19,7 @@ class PlaceDetailSheet extends ConsumerWidget {
   const PlaceDetailSheet({
     super.key,
     required this.placeId,
+    this.initialPlace,
     required this.onClose,
     required this.onNavigate,
     this.onReport,
@@ -54,8 +56,12 @@ class PlaceDetailSheet extends ConsumerWidget {
         ],
       ),
       child: detailAsync.when(
-        loading: () => _buildLoadingState(),
-        error: (err, _) => _buildErrorState(context, ref),
+        loading: () => initialPlace != null
+            ? _buildPlaceContent(context, initialPlace!)
+            : _buildLoadingState(),
+        error: (err, _) => initialPlace != null
+            ? _buildPlaceContent(context, initialPlace!)
+            : _buildErrorState(context, ref),
         data: (place) => _buildPlaceContent(context, place),
       ),
     );
@@ -151,6 +157,7 @@ class PlaceDetailSheet extends ConsumerWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF0F766E),
                 foregroundColor: Colors.white,
+                minimumSize: const Size(0, 40),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () => ref.refresh(placeDetailProvider(placeId)),

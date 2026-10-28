@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
 import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
+import 'package:qvgestion_mobile/core/services/location_service.dart';
 import 'package:qvgestion_mobile/core/services/route_service.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
@@ -82,6 +83,15 @@ class ActiveRouteNotifier extends Notifier<AsyncValue<RouteModel?>> {
     }
   }
 
+  void setRoute(RouteModel route) {
+    state = AsyncValue.data(route);
+    DebugInfo.instance.setRoute(
+      points: route.geometry.length,
+      distanceM: route.distanceMeters,
+      durationS: route.durationSeconds.toDouble(),
+    );
+  }
+
   void clear() {
     state = const AsyncValue.data(null);
     DebugInfo.instance.clearRoute();
@@ -93,21 +103,28 @@ final activeRouteProvider =
   ActiveRouteNotifier.new,
 );
 
-/// Calcul comparatif des modes réels
+/// Calcul comparatif des modes réels (calculé une seule fois par destination choisie, sans scintillement GPS)
 final multiModeRoutesProvider =
     FutureProvider<Map<String, RouteModel>>((ref) async {
   final selectedPlace = ref.watch(selectedPlaceProvider);
   if (selectedPlace == null) return {};
 
-  final currentLocation = ref.watch(currentLocationProvider);
+  final locService = ref.read(locationServiceProvider);
+  final lastGps = locService.last;
+  final currentLocation = ref.read(currentLocationProvider);
   final repository = ref.watch(routesRepositoryProvider);
-  final selectedMode = ref.watch(selectedRouteModeProvider);
 
-  final origin = CoordinateModel(
-    lat: currentLocation.lat,
-    lon: currentLocation.lon,
-    name: currentLocation.label,
-  );
+  final origin = (lastGps != null)
+      ? CoordinateModel(
+          lat: lastGps.latitude,
+          lon: lastGps.longitude,
+          name: 'Ma position GPS',
+        )
+      : CoordinateModel(
+          lat: currentLocation.lat,
+          lon: currentLocation.lon,
+          name: currentLocation.label,
+        );
   final destination = CoordinateModel(
     lat: selectedPlace.latitude,
     lon: selectedPlace.longitude,
@@ -115,16 +132,34 @@ final multiModeRoutesProvider =
   );
 
   final results = <String, RouteModel>{};
-  try {
-    final route = await repository.calculateRoute(
-      origin: origin,
-      destination: destination,
-      mode: selectedMode,
-    );
-    results[route.mode] = route;
-  } catch (e) {
-    AppLogger.w('Échec calcul itinéraire mode $selectedMode: $e');
-  }
+  final modesToFetch = ['moto', 'voiture', 'pied'];
+
+  await Future.wait(
+    modesToFetch.map((m) async {
+      try {
+        final route = await repository.calculateRoute(
+          origin: origin,
+          destination: destination,
+          mode: m,
+        );
+        results[m] = route;
+        results[route.mode] = route;
+        if (m == 'moto' || route.mode == 'moto') {
+          results['motorcycle'] = route;
+        }
+        if (m == 'voiture' || route.mode == 'voiture') {
+          results['auto'] = route;
+        }
+        if (m == 'pied' || route.mode == 'pied') {
+          results['pedestrian'] = route;
+          results['bicycle'] = route;
+          results['velo'] = route;
+        }
+      } catch (e) {
+        AppLogger.w('Échec calcul itinéraire comparatif mode $m: $e');
+      }
+    }),
+  );
 
   return results;
 });

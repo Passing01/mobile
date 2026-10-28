@@ -63,7 +63,102 @@ class MapPinGenerator {
       }
     }
 
+    final modeConfigs = <String, ({Color color, IconData icon})>{
+      'mode-moto': (
+        color: const Color(0xFF0F766E),
+        icon: Icons.two_wheeler_rounded,
+      ),
+      'mode-voiture': (
+        color: const Color(0xFF1D4ED8),
+        icon: Icons.directions_car_rounded,
+      ),
+      'mode-pied': (
+        color: const Color(0xFFEA580C),
+        icon: Icons.directions_walk_rounded,
+      ),
+      'mode-velo': (
+        color: const Color(0xFF16A34A),
+        icon: Icons.pedal_bike_rounded,
+      ),
+    };
+
+    for (final entry in modeConfigs.entries) {
+      if (_cache.containsKey(entry.key)) {
+        pins[entry.key] = _cache[entry.key]!;
+      } else {
+        final bytes = await createModeAvatarBitmap(
+          color: entry.value.color,
+          icon: entry.value.icon,
+        );
+        _cache[entry.key] = bytes;
+        pins[entry.key] = bytes;
+      }
+    }
+
     return pins;
+  }
+
+  /// Dessine un médaillon circulaire pour représenter le mode de transport de l'utilisateur (Moto, Voiture, Piéton, Vélo)
+  static Future<Uint8List> createModeAvatarBitmap({
+    required Color color,
+    required IconData icon,
+    double size = 84.0,
+  }) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, size, size));
+    final center = Offset(size / 2, size / 2);
+    final radius = size * 0.38;
+
+    // 1. Halo extérieur lumineux
+    final haloPaint = Paint()
+      ..color = color.withValues(alpha: 0.25)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, size * 0.48, haloPaint);
+
+    // 2. Ombre portée
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.30)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+    canvas.drawCircle(Offset(center.dx, center.dy + 2), radius, shadowPaint);
+
+    // 3. Disque principal coloré
+    final fillPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, radius, fillPaint);
+
+    // 4. Anneau blanc de contraste
+    final borderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0;
+    canvas.drawCircle(center, radius, borderPaint);
+
+    // 5. Pictogramme du moyen de déplacement (marcheur, moto, voiture, vélo)
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    textPainter.text = TextSpan(
+      text: String.fromCharCode(icon.codePoint),
+      style: TextStyle(
+        fontSize: radius * 1.18,
+        fontFamily: icon.fontFamily,
+        package: icon.fontPackage,
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(
+        center.dx - textPainter.width / 2,
+        center.dy - textPainter.height / 2,
+      ),
+    );
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
   }
 
   /// Dessine un pin de carte avec pointe vers le bas, ombre et pictogramme

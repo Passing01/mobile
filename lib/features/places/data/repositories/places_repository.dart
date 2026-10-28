@@ -262,15 +262,13 @@ class PlacesRepository {
       if (data is Map && data['type'] == 'FeatureCollection') {
         final features = (data['features'] as List<dynamic>?) ?? [];
         if (features.isNotEmpty) {
-          // Persistance locale automatique par catégorie
-          await _persistFeaturesToCategoryCache(features);
-
-          try {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString(cacheKey, jsonEncode(data));
-          } catch (e) {
+          // Persistance locale en tâche de fond sans bloquer le rendu fluide de la carte
+          _persistFeaturesToCategoryCache(features);
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.setString(cacheKey, jsonEncode(data));
+          }).catchError((Object e) {
             AppLogger.w('Impossible de mettre en cache les lieux: $e');
-          }
+          });
         }
         final map = <String, dynamic>{'is_offline': false};
         data.forEach((k, v) => map[k.toString()] = v);
