@@ -14,6 +14,10 @@ class ActiveNavigationCard extends StatelessWidget {
   final int currentStep;
   final int totalSteps;
   final int confidence; // 3 relevé terrain, 2 déduit d'une source ouverte, 1 incertain
+  final double? speedKmh;
+  final bool isRerouting;
+  final String? rerouteError;
+  final bool isArrived;
   final VoidCallback onPlayVoice;
   final VoidCallback onReportHazard;
   final VoidCallback onStopNavigation;
@@ -33,6 +37,10 @@ class ActiveNavigationCard extends StatelessWidget {
     this.currentStep = 1,
     this.totalSteps = 1,
     this.confidence = 2,
+    this.speedKmh,
+    this.isRerouting = false,
+    this.rerouteError,
+    this.isArrived = false,
     required this.onPlayVoice,
     required this.onReportHazard,
     required this.onStopNavigation,
@@ -198,29 +206,151 @@ class ActiveNavigationCard extends StatelessWidget {
           const Divider(height: 1, color: Color(0xFFE5E7EB)),
           const SizedBox(height: 12),
 
-          // Métriques temps réel (Durée & Distance restantes) + Signalement & Arrêt
+          // Bandeau d'état spécial (Recalcul en cours, Erreur de recalcul hors-ligne, ou Arrivée)
+          if (isArrived) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDCFCE7),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF16A34A)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.check_circle_rounded, size: 18, color: Color(0xFF15803D)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Vous êtes arrivé à destination',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF15803D),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (isRerouting) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFD97706)),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Sortie de route détectée · Recalcul en cours…',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (rerouteError != null && rerouteError!.isNotEmpty) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEE2E2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.wifi_off_rounded, size: 16, color: Color(0xFFB91C1C)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      rerouteError!,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFB91C1C),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // Métriques temps réel (Durée, Distance restante, Vitesse) + Signalement & Terminer
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    remainingTime,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF15803D), // Vert succès
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        remainingTime,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF15803D), // Vert succès
+                        ),
+                      ),
+                      Text(
+                        remainingDistance,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF6B7280),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    remainingDistance,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF6B7280),
-                      fontWeight: FontWeight.w500,
+                  if (speedKmh != null) ...[
+                    const SizedBox(width: 12),
+                    Container(
+                      key: const Key('nav_speed_badge'),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3F4F6),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${speedKmh!.round()}',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF111827),
+                              height: 1.0,
+                            ),
+                          ),
+                          const Text(
+                            'km/h',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
               Row(
@@ -233,7 +363,7 @@ class ActiveNavigationCard extends StatelessWidget {
                     tooltip: 'Signaler un danger ou nid de poule',
                   ),
                   const SizedBox(width: 8),
-                  // Bouton Arrêter navigation
+                  // Bouton Terminer navigation (Étape 8 - Règle 6)
                   Tooltip(
                     message: 'Arrêter la navigation',
                     child: ElevatedButton(
@@ -255,7 +385,7 @@ class ActiveNavigationCard extends StatelessWidget {
                         children: [
                           Icon(Icons.close_rounded, size: 16),
                           SizedBox(width: 4),
-                          Text('Quitter', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text('Terminer', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         ],
                       ),
                     ),

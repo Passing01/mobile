@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -6,12 +7,7 @@ import 'package:qvgestion_mobile/core/debug/debug_info.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 
 /// Statuts de permission et disponibilité du service de localisation (Étape 6)
-enum LocationStatus {
-  ok,
-  denied,
-  deniedForever,
-  serviceOff,
-}
+enum LocationStatus { ok, denied, deniedForever, serviceOff }
 
 /// Service unique de position et de suivi GPS pour toute l'application.
 ///
@@ -29,12 +25,17 @@ class LocationService {
   StreamSubscription<Position>? _sub;
   Position? last;
   Timer? _watchdog;
+  bool _navigationMode = false;
+
+  /// Indique si le service GPS est en mode navigation active (service de premier plan + WakeLock)
+  bool get isNavigationMode => _navigationMode;
 
   /// Notifie l'état de perte de signal GPS (> 10 secondes sans point valide)
   final ValueNotifier<bool> gpsLost = ValueNotifier<bool>(false);
 
   /// Dernier statut de permission obtenu
-  final ValueNotifier<LocationStatus?> statusNotifier = ValueNotifier<LocationStatus?>(null);
+  final ValueNotifier<LocationStatus?> statusNotifier =
+      ValueNotifier<LocationStatus?>(null);
 
   /// S'assure que les permissions et services sont disponibles (Étape 6)
   Future<LocationStatus> ensurePermission() async {
@@ -83,13 +84,23 @@ class LocationService {
     try {
       return await Geolocator.openLocationSettings();
     } catch (e) {
-      AppLogger.e('[GPS] Impossible d\'ouvrir les réglages de localisation: $e');
+      AppLogger.e(
+        '[GPS] Impossible d\'ouvrir les réglages de localisation: $e',
+      );
       return false;
     }
   }
 
+  /// Bascule entre le mode exploration normal et le mode navigation (Étape 8 - Règle 7 : écran verrouillé)
+  Future<void> setNavigationMode(bool active) async {
+    if (_navigationMode == active && _sub != null) return;
+    _navigationMode = active;
+    await start();
+  }
+
   /// Démarre le flux GPS haute précision et le watchdog de signal
   Future<void> start() async {
+    final navigationMode = _navigationMode;
     await _sub?.cancel();
 
     // Récupération instantanée du dernier fix connu du système
@@ -104,26 +115,38 @@ class LocationService {
 
     final LocationSettings locationSettings;
     if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-      locationSettings = AndroidSettings(
-        accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 0,
-        intervalDuration: const Duration(seconds: 1),
-      );
+      if (navigationMode) {
+        // Étape 8 · Règle 7 : Navigation active même écran verrouillé
+        locationSettings = AndroidSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 3,
+          intervalDuration: const Duration(seconds: 1),
+          foregroundNotificationConfig: const ForegroundNotificationConfig(
+            notificationTitle: 'FASO NAV',
+            notificationText: 'Navigation en cours',
+            enableWakeLock: true,
+          ),
+        );
+      } else {
+        locationSettings = AndroidSettings(
+          accuracy: LocationAccuracy.bestForNavigation,
+          distanceFilter: 0,
+          intervalDuration: const Duration(seconds: 1),
+        );
+      }
     } else if (kIsWeb) {
       locationSettings = const LocationSettings(
         accuracy: LocationAccuracy.high,
         distanceFilter: 0,
       );
     } else {
-      locationSettings = const LocationSettings(
+      locationSettings = LocationSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 0,
+        distanceFilter: navigationMode ? 3 : 0,
       );
     }
 
-    _sub = Geolocator.getPositionStream(
-      locationSettings: locationSettings,
-    ).listen(
+    _sub = Geolocator.getPositionStream(locationSettings: locationSettings).listen(
       (p) {
         last = p;
         // Journalisation obligatoire conforme Étape 6 :
@@ -154,12 +177,16 @@ class LocationService {
     _watchdog?.cancel();
     _watchdog = Timer.periodic(const Duration(seconds: 2), (_) {
       final fixAt = DebugInfo.instance.lastFixAt;
-      final age = fixAt == null ? 999 : DateTime.now().difference(fixAt).inSeconds;
+      final age = fixAt == null
+          ? 999
+          : DateTime.now().difference(fixAt).inSeconds;
       final isLost = age > 10;
       if (isLost != gpsLost.value) {
         gpsLost.value = isLost;
         if (isLost) {
-          AppLogger.w('⚠️ [GPS] Signal GPS perdu (aucun point reçu depuis ${age}s)');
+          AppLogger.w(
+            '⚠️ [GPS] Signal GPS perdu (aucun point reçu depuis ${age}s)',
+          );
         }
       }
     });
@@ -202,7 +229,9 @@ final gpsStreamProvider = StreamProvider<Position>((ref) {
 });
 
 /// Provider signalant la perte de signal GPS (> 10s)
-final gpsLostProvider = NotifierProvider<GpsLostNotifier, bool>(GpsLostNotifier.new);
+final gpsLostProvider = NotifierProvider<GpsLostNotifier, bool>(
+  GpsLostNotifier.new,
+);
 
 class GpsLostNotifier extends Notifier<bool> {
   VoidCallback? _listener;

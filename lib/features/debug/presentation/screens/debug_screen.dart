@@ -345,20 +345,33 @@ class _DebugScreenState extends State<DebugScreen> {
           ),
           const SizedBox(height: 10),
 
-          // 6. Test d'arrivée
+          // 6. Test d'arrivée & Navigation (Étape 8)
           _buildDebugCard(
-            title: '6. Test d\'Arrivée',
+            title: '6. Navigation & Test d\'Arrivée',
             icon: Icons.sports_score_rounded,
             children: [
+              _buildRow('État Navigation', _debugInfo.navState.toUpperCase()),
               _buildRow(
-                'Distance à l\'arrivée',
+                'Distance parcourue (along)',
+                '${_debugInfo.navAlongM.toStringAsFixed(0)} m',
+              ),
+              _buildRow(
+                'Distance restante (remaining)',
                 _debugInfo.distanceToArrivalM != null
                     ? '${_debugInfo.distanceToArrivalM!.toStringAsFixed(1)} m'
-                    : 'N/A',
+                    : '${_debugInfo.navRemainingM.toStringAsFixed(0)} m',
+              ),
+              _buildRow(
+                'Écart au tracé (off)',
+                '${_debugInfo.navOffRouteM.toStringAsFixed(1)} m',
+              ),
+              _buildRow(
+                'Vitesse GPS',
+                '${_debugInfo.navSpeedKmh.toStringAsFixed(1)} km/h',
               ),
               _buildRow(
                 'Seuil d\'arrivée configuré',
-                '${_debugInfo.arrivalThresholdM.toStringAsFixed(0)} m',
+                '${_debugInfo.arrivalThresholdM.toStringAsFixed(0)} m (après 90% sur 2 fixes)',
               ),
             ],
           ),

@@ -23,9 +23,14 @@ class DebugInfo extends ChangeNotifier {
   double routeDistanceM = 0;
   double routeDurationS = 0;
 
-  // 4. Test d'arrivée
+  // 4. Test d'arrivée & Navigation (Étape 8)
   double? distanceToArrivalM;
   double arrivalThresholdM = 25.0;
+  String navState = 'idle';
+  double navAlongM = 0;
+  double navRemainingM = 0;
+  double navOffRouteM = 0;
+  double navSpeedKmh = 0;
 
   // 5. Erreurs d'API
   String? lastApiError;
@@ -79,6 +84,23 @@ class DebugInfo extends ChangeNotifier {
   /// Met à jour la distance restante à l'arrivée
   void updateArrivalDistance(double distM) {
     distanceToArrivalM = distM;
+    notifyListeners();
+  }
+
+  /// Met à jour la progression de navigation en temps réel (Étape 8)
+  void updateNavProgress({
+    required String state,
+    required double alongM,
+    required double remainingM,
+    required double offM,
+    double speedKmh = 0,
+  }) {
+    navState = state;
+    navAlongM = alongM;
+    navRemainingM = remainingM;
+    navOffRouteM = offM;
+    navSpeedKmh = speedKmh;
+    distanceToArrivalM = remainingM;
     notifyListeners();
   }
 
