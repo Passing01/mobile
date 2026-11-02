@@ -39,6 +39,14 @@ class MapConfig {
 
   static String _sanitizeUrl(String? url, String fallback) {
     if (url == null || url.isEmpty) return fallback;
+    // Sur mobile, si l'URL pointe sur localhost/127.0.0.1/10.0.2.2 pour les styles,
+    // conserver les assets locaux embarqués pour une stabilité maximale et éviter un rechargement asynchrone bloquant
+    if (!kIsWeb &&
+        (url.contains('127.0.0.1') ||
+            url.contains('localhost') ||
+            url.contains('10.0.2.2'))) {
+      return fallback;
+    }
     if (url.startsWith('http://') && url.contains('railway.app')) {
       return url.replaceFirst('http://', 'https://');
     }

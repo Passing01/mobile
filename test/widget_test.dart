@@ -83,11 +83,11 @@ void main() {
     // 1. Vérification de l'en-tête officiel FASO NAV
     expect(find.text('FASO NAV'), findsOneWidget);
 
-    // 2. Vérification des 4 onglets de la Bottom Navigation Bar publique (Admin masqué pour le grand public)
+    // 2. Vérification des onglets de la Bottom Navigation Bar publique (Itinéraires unifié dans Explorer)
     expect(find.text('Explorer'), findsWidgets);
-    expect(find.text('Itinéraires'), findsOneWidget);
     expect(find.text('Sauvegardés'), findsOneWidget);
     expect(find.text('Compte'), findsOneWidget);
+    expect(find.text('Itinéraires'), findsNothing);
     expect(find.text('Admin'), findsNothing);
 
     // 3. Navigation vers l'onglet Compte

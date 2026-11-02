@@ -110,19 +110,27 @@ class MapLibreMapService implements MapService {
   PlaceModel? _selectedPlace;
 
   String _modeIconFor(String? mode) {
-    final m = (mode ?? 'moto').toLowerCase().trim();
+    if (mode == null || mode.isEmpty || mode == 'default' || mode == 'none') {
+      return 'user-location-pin';
+    }
+    final m = mode.toLowerCase().trim();
     if (m == 'pied' || m == 'pedestrian' || m == 'walk') return 'mode-pied';
     if (m == 'voiture' || m == 'auto' || m == 'car') return 'mode-voiture';
     if (m == 'velo' || m == 'bicycle' || m == 'bike') return 'mode-velo';
-    return 'mode-moto';
+    if (m == 'moto' || m == 'motorcycle') return 'mode-moto';
+    return 'user-location-pin';
   }
 
   String _modeLabelFor(String? mode) {
-    final m = (mode ?? 'moto').toLowerCase().trim();
+    if (mode == null || mode.isEmpty || mode == 'default' || mode == 'none') {
+      return 'Ma position';
+    }
+    final m = mode.toLowerCase().trim();
     if (m == 'pied' || m == 'pedestrian' || m == 'walk') return 'Ma position • À pied';
     if (m == 'voiture' || m == 'auto' || m == 'car') return 'Ma position • Voiture';
     if (m == 'velo' || m == 'bicycle' || m == 'bike') return 'Ma position • Vélo';
-    return 'Ma position • Moto';
+    if (m == 'moto' || m == 'motorcycle') return 'Ma position • Moto';
+    return 'Ma position';
   }
 
   @override
@@ -745,7 +753,7 @@ class MapLibreMapService implements MapService {
 
   @override
   Future<void> setTransportMode(String? mode) async {
-    _transportMode = (mode == null || mode.isEmpty) ? 'moto' : mode;
+    _transportMode = (mode == null || mode.isEmpty || mode == 'none' || mode == 'default') ? null : mode;
     final lat = _userLat;
     final lon = _userLon;
     if (lat != null && lon != null) {

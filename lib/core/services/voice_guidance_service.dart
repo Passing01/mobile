@@ -1,51 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_tts/flutter_tts.dart';
-import 'package:qvgestion_mobile/core/utils/app_logger.dart';
+import 'package:qvgestion_mobile/core/services/voice_guide_service.dart';
 
-/// Service gérant la synthèse vocale réelle (TTS) pour le guidage pas-à-pas
+/// Adaptateur de compatibilité vers le service officiel [VoiceGuide] (Étape 9)
 class VoiceGuidanceService {
-  final FlutterTts _flutterTts = FlutterTts();
-  bool _isInitialized = false;
+  VoiceGuidanceService(this._voiceGuide);
 
-  Future<void> initialize() async {
-    if (_isInitialized) return;
-    try {
-      await _flutterTts.setLanguage('fr-FR');
-      await _flutterTts.setSpeechRate(0.48);
-      await _flutterTts.setVolume(1.0);
-      await _flutterTts.setPitch(1.0);
-      _isInitialized = true;
-    } catch (e) {
-      AppLogger.w('TTS non disponible sur cet environnement: $e');
-    }
-  }
+  final VoiceGuide _voiceGuide;
 
-  /// Énonce à haute voix une consigne de navigation
-  Future<void> speak(String text, {String language = 'fr'}) async {
-    try {
-      if (!_isInitialized) {
-        await initialize();
-      }
-      await _flutterTts.setLanguage('fr-FR');
-      await _flutterTts.stop();
-      await _flutterTts.speak(text);
-    } catch (e) {
-      AppLogger.w('Consigne vocale ignorée (TTS indisponible ou erreur moteur): $e');
-    }
-  }
+  Future<void> initialize() => _voiceGuide.init();
 
-  /// Interrompt la lecture vocale
-  Future<void> stop() async {
-    try {
-      await _flutterTts.stop();
-    } catch (e) {
-      AppLogger.d('Arrêt TTS ignoré: $e');
-    }
-  }
+  Future<void> speak(String text, {String language = 'fr'}) =>
+      _voiceGuide.say(text, language: language);
+
+  Future<void> stop() => _voiceGuide.stop();
 }
 
 final voiceGuidanceServiceProvider = Provider<VoiceGuidanceService>((ref) {
-  final service = VoiceGuidanceService();
-  service.initialize();
-  return service;
+  final voiceGuide = ref.watch(voiceGuideProvider);
+  return VoiceGuidanceService(voiceGuide);
 });

@@ -28,6 +28,7 @@ import 'package:qvgestion_mobile/features/map/presentation/widgets/weather_traff
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/places_search_sheet.dart';
+import 'package:qvgestion_mobile/features/places/presentation/widgets/save_place_modal.dart';
 import 'package:qvgestion_mobile/features/guidance/presentation/providers/guidance_providers.dart';
 import 'package:qvgestion_mobile/features/notifications/presentation/widgets/notifications_sheet.dart';
 import 'package:qvgestion_mobile/features/reports/presentation/widgets/report_incident_modal.dart';
@@ -35,6 +36,7 @@ import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 import 'package:qvgestion_mobile/features/routes/presentation/providers/routes_providers.dart';
 import 'package:qvgestion_mobile/features/map/presentation/providers/map_state_provider.dart';
 import 'package:qvgestion_mobile/core/services/voice_guidance_service.dart';
+import 'package:qvgestion_mobile/core/services/voice_guide_service.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/voice_search_sheet.dart';
 import 'package:qvgestion_mobile/features/traffic/presentation/widgets/active_tracking_banner.dart';
 import 'package:qvgestion_mobile/features/traffic/presentation/widgets/share_trip_sheet.dart';
@@ -42,6 +44,7 @@ import 'package:dio/dio.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
 import 'package:qvgestion_mobile/core/services/location_service.dart';
+import 'package:qvgestion_mobile/core/services/route_service.dart';
 import 'package:qvgestion_mobile/core/services/navigation_engine.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/places_list_bottom_sheet.dart';
@@ -89,6 +92,10 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   String? _rerouteErrorBanner;
   bool _isReroutingInFlight = false;
   bool _arrivalAnnounced = false;
+
+  // Guidage vocal et narrateur local (Étape 9)
+  Announcer? _announcer;
+  List<GuideStep> _guideSteps = [];
 
   static bool get _isUnderWidgetTest {
     final binding = WidgetsBinding.instance.runtimeType.toString();
@@ -405,30 +412,34 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       });
     }
 
-    // Progression automatique des consignes vocales le long du tracé réel
-    final route = ref.read(activeRouteProvider).value;
-    if (route != null && route.maneuvers.length > 1 && engine.route.total > 0) {
-      final frac = (u.along / engine.route.total).clamp(0.0, 1.0);
-      final targetIndex = (frac * route.maneuvers.length).floor().clamp(0, route.maneuvers.length - 1);
+    // Étape 9a · Annonceur pas-à-pas à 200m et 50m (fenêtre 40m, sans répétition)
+    final lang = ref.read(guidanceLanguageProvider);
+    if (_announcer != null && _guideSteps.isNotEmpty) {
+      _announcer!.onProgress(u.along, _guideSteps, language: lang);
+    }
+
+    // Calcul réactif de l'étape de navigation courante
+    if (_guideSteps.isNotEmpty) {
+      int targetIndex = 0;
+      for (var i = 0; i < _guideSteps.length; i++) {
+        if (u.along < _guideSteps[i].along - 10) {
+          targetIndex = i;
+          break;
+        }
+        targetIndex = i;
+      }
       if (targetIndex != ref.read(currentManeuverIndexProvider)) {
         ref.read(currentManeuverIndexProvider.notifier).setIndex(targetIndex);
-        final enriched = ref.read(activeEnrichedRouteProvider).value;
-        final instruction = (enriched != null && targetIndex < enriched.enrichedManeuvers.length)
-            ? enriched.enrichedManeuvers[targetIndex].localizedInstruction
-            : route.maneuvers[targetIndex].instruction;
-        final lang = ref.read(guidanceLanguageProvider);
-        ref.read(voiceGuidanceServiceProvider).speak(instruction, language: lang);
       }
     }
 
     // Règle 5 : Arrivée réelle à <= 25 m après >= 90 % du parcours sur 2 points consécutifs
     if (u.state == NavState.arrived && !_arrivalAnnounced) {
       _arrivalAnnounced = true;
-      final lang = ref.read(guidanceLanguageProvider);
-      ref.read(voiceGuidanceServiceProvider).speak(
-        'Vous êtes arrivé à destination !',
-        language: lang,
-      );
+      final arriveText = lang == 'mos'
+          ? 'Y taame y zĩigẽ !'
+          : (lang == 'diu' ? 'I sera i yɔrɔ la !' : 'Vous êtes arrivé à destination !');
+      ref.read(voiceGuideProvider).say(arriveText, language: lang);
       if (mounted) {
         AppSnackbar.showSuccess(
           context,
@@ -485,6 +496,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       if (NavigationEngine.canStart(newGeom) == null) {
         _navEngine = NavigationEngine(newGeom);
         _arrivalAnnounced = false;
+        _announcer?.reset();
         final u = _navEngine!.onFix(currentPos, 10.0, DateTime.now());
         setState(() {
           _lastNavUpdate = u;
@@ -492,10 +504,15 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
           _rerouteErrorBanner = null;
         });
         final lang = ref.read(guidanceLanguageProvider);
-        await ref.read(activeEnrichedRouteProvider.notifier).enrichRoute(
+        final enriched = await ref.read(activeEnrichedRouteProvider.notifier).enrichRoute(
               route: newRoute,
               language: lang,
             );
+        _guideSteps = buildGuideSteps(
+          route: newRoute,
+          enrichedRoute: enriched,
+          places: ref.read(placesStateProvider).placesList,
+        );
         return;
       }
     }
@@ -629,6 +646,19 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     _rerouteErrorBanner = null;
     _isReroutingInFlight = false;
 
+    // Initialisation du guidage vocal et narrateur local (Étape 9)
+    final voiceGuide = ref.read(voiceGuideProvider);
+    voiceGuide.init();
+    _announcer = Announcer(voiceGuide);
+    _announcer!.reset();
+    final enriched = ref.read(activeEnrichedRouteProvider).value;
+    final places = ref.read(placesStateProvider).placesList;
+    _guideSteps = buildGuideSteps(
+      route: route,
+      enrichedRoute: enriched,
+      places: places,
+    );
+
     final selectedModeNow = ref.read(selectedRouteModeProvider);
     ref.read(mapServiceProvider).setTransportMode(selectedModeNow);
 
@@ -742,12 +772,22 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     }
 
     final activeLang = ref.read(guidanceLanguageProvider);
+    final voiceGuide = ref.read(voiceGuideProvider);
+    voiceGuide.init();
+    _announcer = Announcer(voiceGuide);
+    _announcer!.reset();
+    final enriched = ref.read(activeEnrichedRouteProvider).value;
+    final places = ref.read(placesStateProvider).placesList;
+    _guideSteps = buildGuideSteps(
+      route: route,
+      enrichedRoute: enriched,
+      places: places,
+    );
+
     final firstInstruction = route.maneuvers.isNotEmpty
         ? route.maneuvers.first.instruction
         : 'Suivre l\'itinéraire';
-    ref
-        .read(voiceGuidanceServiceProvider)
-        .speak(firstInstruction, language: activeLang);
+    voiceGuide.say(firstInstruction, language: activeLang);
 
     // Règle 8 : La simulation alimente exactement le même NavigationEngine que le GPS réel
     _processNavigationFix(firstPt, 5.0, 28.0, DateTime.now());
@@ -823,7 +863,9 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   void _stopNavigationSimulation() {
     _simulationTimer?.cancel();
     _simulationTimer = null;
-    ref.read(voiceGuidanceServiceProvider).stop();
+    _announcer?.reset();
+    _guideSteps.clear();
+    ref.read(voiceGuideProvider).stop();
     if (mounted) {
       setState(() {
         _vehiclePosition = null;
@@ -835,6 +877,9 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
 
   void _cancelRouteAndNavigation() {
     _stopNavigationSimulation();
+    _announcer?.reset();
+    _guideSteps.clear();
+    ref.read(voiceGuideProvider).stop();
     _navEngine?.stop();
     _navEngine = null;
     _lastNavUpdate = null;
@@ -938,6 +983,46 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         .read(activeRouteProvider.notifier)
         .calculate(origin: origin, destination: destination, mode: mode);
     ref.read(mapScreenStateProvider.notifier).toRouteSelection();
+  }
+
+  Future<void> _launchMultiPointRoute(RoutePlannerResult plan) async {
+    try {
+      final routeService = ref.read(routeServiceProvider);
+      final mapService = ref.read(mapServiceProvider);
+
+      final route = await routeService.computeRoute(
+        points: plan.allPoints,
+        mode: plan.mode,
+      );
+
+      ref.read(selectedRouteModeProvider.notifier).selectMode(plan.mode);
+      ref.read(activeRouteProvider.notifier).setRoute(route);
+      await mapService.setRoute(route);
+      await mapService.setTransportMode(plan.mode);
+
+      ref.read(mapScreenStateProvider.notifier).toRouteSelection();
+      _activePlaceSheetId = null;
+      _activeTappedPlace = null;
+
+      if (route.boundingBox.length >= 4) {
+        await mapService.fitBounds(
+          minLat: route.boundingBox[0],
+          minLon: route.boundingBox[1],
+          maxLat: route.boundingBox[2],
+          maxLon: route.boundingBox[3],
+          padding: 80,
+        );
+      }
+    } catch (e) {
+      AppLogger.e('Erreur calcul multi-points: $e');
+      if (mounted) {
+        AppSnackbar.showError(
+          context,
+          title: 'Itinéraire direct',
+          message: 'Impossible de tracer l\'itinéraire ($e)',
+        );
+      }
+    }
   }
 
   void _closePlaceSheet() {
@@ -1183,6 +1268,27 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               style: TextStyle(color: Color(0xFF64748B)),
             ),
           ),
+          OutlinedButton.icon(
+            key: const Key('btn_save_destination'),
+            onPressed: () {
+              Navigator.of(ctx).pop(false);
+              SavePlaceModal.show(
+                context,
+                latitude: geo.latitude,
+                longitude: geo.longitude,
+                initialName: nearbyNamedPlace?.nom,
+              );
+            },
+            icon: const Icon(Icons.bookmark_add_rounded, size: 16),
+            label: const Text('Enregistrer ce lieu'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF0F766E),
+              side: const BorderSide(color: Color(0xFF0F766E)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
           ElevatedButton(
             key: const Key('btn_confirm_destination'),
             style: ElevatedButton.styleFrom(
@@ -1359,7 +1465,9 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               _mapController = controller;
               mapService.attach(controller);
               await mapService.setTransportMode(
-                ref.read(selectedRouteModeProvider),
+                screenState == MapScreenState.explore
+                    ? null
+                    : ref.read(selectedRouteModeProvider),
               );
               await mapService.setupLayers(theme: mapTheme);
               final lastGps = ref.read(locationServiceProvider).last;
@@ -1450,18 +1558,11 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               ),
             ),
 
-          // 1.1b SÉLECTEUR FLOTTANT DE MODE DE DÉPLACEMENT (Moto, Voiture, Vélo, À pied)
-          if (screenState != MapScreenState.activeNavigation)
-            Positioned(
-              left: 16,
-              bottom: 256,
-              child: _buildQuickTransportModeBar(),
-            ),
 
           // 1.2 CONTRÔLES FLOTTANTS CARTE (Signalement, Centrage GPS - visible aussi en navigation Étape 8 Règle 6)
           Positioned(
             right: 16,
-            bottom: 270,
+            bottom: 200,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1547,6 +1648,44 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                     child: Icon(
                       isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                       color: isDark ? const Color(0xFFF59E0B) : const Color(0xFF4B5563),
+                      size: 24,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Bouton Enregistrer / Créer un lieu depuis ma position (style Google Maps)
+                GestureDetector(
+                  key: const Key('fab_save_location'),
+                  onTap: () {
+                    final lastGps = ref.read(locationServiceProvider).last;
+                    final loc = ref.read(currentLocationProvider);
+                    final lat = lastGps?.latitude ?? loc.lat;
+                    final lon = lastGps?.longitude ?? loc.lon;
+                    SavePlaceModal.show(
+                      context,
+                      latitude: lat,
+                      longitude: lon,
+                      initialName: 'Ma position',
+                    );
+                  },
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFFE5E7EB)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.12),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.bookmark_add_rounded,
+                      color: Color(0xFF0F766E),
                       size: 24,
                     ),
                   ),
@@ -1830,11 +1969,13 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                   const SizedBox(height: 6),
                   FasoNavSearchBar(
                     onTap: () async {
-                      final chosenPlace = await PlacesSearchSheet.show(context);
-                      if (chosenPlace != null) {
+                      final result = await PlacesSearchSheet.show(context);
+                      if (result is PlaceModel) {
                         ref
                             .read(selectedPlaceProvider.notifier)
-                            .select(chosenPlace);
+                            .select(result);
+                      } else if (result is RoutePlannerResult) {
+                        await _launchMultiPointRoute(result);
                       }
                     },
                     onVoiceTap: () async {
@@ -2129,107 +2270,6 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     return 'MOTO';
   }
 
-  Widget _buildQuickTransportModeBar() {
-    final selectedMode = ref.watch(selectedRouteModeProvider).toLowerCase();
-    final isMoto = selectedMode == 'moto' || selectedMode == 'motorcycle';
-    final isAuto = selectedMode == 'voiture' || selectedMode == 'auto';
-    final isVelo = selectedMode == 'velo' || selectedMode == 'bicycle';
-    final isPied = selectedMode == 'pied' || selectedMode == 'pedestrian';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFFE5E7EB)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildModePillItem(
-              modeId: 'motorcycle',
-              icon: Icons.two_wheeler_rounded,
-              label: 'Moto',
-              color: const Color(0xFF0F766E),
-              isSelected: isMoto,
-            ),
-            const SizedBox(width: 4),
-            _buildModePillItem(
-              modeId: 'auto',
-              icon: Icons.directions_car_rounded,
-              label: 'Voiture',
-              color: const Color(0xFF1D4ED8),
-              isSelected: isAuto,
-            ),
-            const SizedBox(width: 4),
-            _buildModePillItem(
-              modeId: 'bicycle',
-              icon: Icons.pedal_bike_rounded,
-              label: 'Vélo',
-              color: const Color(0xFF16A34A),
-              isSelected: isVelo,
-            ),
-            const SizedBox(width: 4),
-            _buildModePillItem(
-              modeId: 'pedestrian',
-              icon: Icons.directions_walk_rounded,
-              label: 'À pied',
-              color: const Color(0xFFEA580C),
-              isSelected: isPied,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildModePillItem({
-    required String modeId,
-    required IconData icon,
-    required String label,
-    required Color color,
-    required bool isSelected,
-  }) {
-    return InkWell(
-      onTap: () {
-        ref.read(selectedRouteModeProvider.notifier).selectMode(modeId);
-        ref.read(mapServiceProvider).setTransportMode(modeId);
-      },
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isSelected ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: isSelected ? Colors.white : color),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.white : const Color(0xFF1E293B),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildRoutePreviewTopBar(PlaceModel? selectedPlace) {
     final selectedMode = ref.watch(selectedRouteModeProvider);
@@ -2775,85 +2815,108 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               '9 min';
         }
 
-        return ActiveNavigationCard(
-          nextManeuverText: nextInstruction,
-          distanceToManeuver: distanceText,
-          maneuverIcon: _lastNavUpdate?.state == NavState.arrived
-              ? Icons.flag_rounded
-              : (currentEnriched?.iconData ?? Icons.turn_right_rounded),
-          culturalLandmark: landmarkText,
-          confidence: currentEnriched?.confidence ?? 2,
-          remainingTime: liveRemainingTime,
-          remainingDistance: liveRemainingDistance,
-          speedKmh: _currentSpeedKmh,
-          isRerouting:
-              _lastNavUpdate?.state == NavState.rerouting || _isReroutingInFlight,
-          rerouteError: _rerouteErrorBanner,
-          isArrived: _lastNavUpdate?.state == NavState.arrived,
-          activeLanguage: activeLang.toUpperCase(),
-          currentStep: currentStep,
-          totalSteps: totalSteps,
-          onLanguageChanged: (newLang) async {
-            ref.read(guidanceLanguageProvider.notifier).setLanguage(newLang);
-            if (route != null) {
-              await ref
-                  .read(activeEnrichedRouteProvider.notifier)
-                  .enrichRoute(route: route, language: newLang);
-              final localized =
+        final voiceGuide = ref.watch(voiceGuideProvider);
+
+        return ValueListenableBuilder<String>(
+          valueListenable: voiceGuide.banner,
+          builder: (context, bannerText, _) {
+            final effectiveInstruction =
+                bannerText.isNotEmpty ? bannerText : nextInstruction;
+
+            final stepIdx = ref.watch(currentManeuverIndexProvider);
+            final stepIcon = _lastNavUpdate?.state == NavState.arrived
+                ? Icons.flag_rounded
+                : (stepIdx < _guideSteps.length
+                    ? _guideSteps[stepIdx].iconData
+                    : (currentEnriched?.iconData ?? Icons.turn_right_rounded));
+
+            return ActiveNavigationCard(
+              nextManeuverText: effectiveInstruction,
+              distanceToManeuver: distanceText,
+              maneuverIcon: stepIcon,
+              culturalLandmark: landmarkText,
+              confidence: currentEnriched?.confidence ?? 2,
+              remainingTime: liveRemainingTime,
+              remainingDistance: liveRemainingDistance,
+              speedKmh: _currentSpeedKmh,
+              isRerouting:
+                  _lastNavUpdate?.state == NavState.rerouting || _isReroutingInFlight,
+              rerouteError: _rerouteErrorBanner,
+              isArrived: _lastNavUpdate?.state == NavState.arrived,
+              activeLanguage: activeLang.toUpperCase(),
+              currentStep: currentStep,
+              totalSteps: totalSteps,
+              onLanguageChanged: (newLang) async {
+                ref.read(guidanceLanguageProvider.notifier).setLanguage(newLang);
+                if (route != null) {
+                  final newEnriched = await ref
+                      .read(activeEnrichedRouteProvider.notifier)
+                      .enrichRoute(route: route, language: newLang);
+                  _guideSteps = buildGuideSteps(
+                    route: route,
+                    enrichedRoute: newEnriched,
+                    places: ref.read(placesStateProvider).placesList,
+                  );
+                  final localized =
+                      ref
+                          .read(currentEnrichedManeuverProvider)
+                          ?.localizedInstruction ??
+                      nextInstruction;
                   ref
-                      .read(currentEnrichedManeuverProvider)
-                      ?.localizedInstruction ??
-                  nextInstruction;
-              ref
-                  .read(voiceGuidanceServiceProvider)
-                  .speak(localized, language: newLang);
-            }
-          },
-          onNextStep: () {
-            ref.read(currentManeuverIndexProvider.notifier).next(totalSteps);
-            final nextIdx = ref.read(currentManeuverIndexProvider);
-            final inst =
-                (enrichedRoute != null &&
-                    nextIdx < enrichedRoute.enrichedManeuvers.length)
-                ? enrichedRoute.enrichedManeuvers[nextIdx].localizedInstruction
-                : (route != null && nextIdx < route.maneuvers.length)
-                ? route.maneuvers[nextIdx].instruction
-                : nextInstruction;
-            ref
-                .read(voiceGuidanceServiceProvider)
-                .speak(inst, language: activeLang);
-          },
-          onPreviousStep: () {
-            ref.read(currentManeuverIndexProvider.notifier).previous();
-            final prevIdx = ref.read(currentManeuverIndexProvider);
-            final inst =
-                (enrichedRoute != null &&
-                    prevIdx < enrichedRoute.enrichedManeuvers.length)
-                ? enrichedRoute.enrichedManeuvers[prevIdx].localizedInstruction
-                : (route != null && prevIdx < route.maneuvers.length)
-                ? route.maneuvers[prevIdx].instruction
-                : nextInstruction;
-            ref
-                .read(voiceGuidanceServiceProvider)
-                .speak(inst, language: activeLang);
-          },
-          onPlayVoice: () {
-            ref
-                .read(voiceGuidanceServiceProvider)
-                .speak(nextInstruction, language: activeLang);
-            final soundId = currentEnriched?.audioSoundId;
-            final audioUrl = currentEnriched?.audioUrl;
-            AppSnackbar.showInfo(
-              context,
-              title: 'Consigne vocale (${activeLang.toUpperCase()})',
-              message:
-                  '📢 "$nextInstruction"${audioUrl != null ? " • Audio: $soundId.wav" : ""}',
+                      .read(voiceGuideProvider)
+                      .say(localized, language: newLang);
+                }
+              },
+              onNextStep: () {
+                ref.read(currentManeuverIndexProvider.notifier).next(totalSteps);
+                final nextIdx = ref.read(currentManeuverIndexProvider);
+                final inst =
+                    (enrichedRoute != null &&
+                        nextIdx < enrichedRoute.enrichedManeuvers.length)
+                    ? enrichedRoute.enrichedManeuvers[nextIdx].localizedInstruction
+                    : (route != null && nextIdx < route.maneuvers.length)
+                    ? route.maneuvers[nextIdx].instruction
+                    : nextInstruction;
+                ref
+                    .read(voiceGuideProvider)
+                    .say(inst, language: activeLang);
+              },
+              onPreviousStep: () {
+                ref.read(currentManeuverIndexProvider.notifier).previous();
+                final prevIdx = ref.read(currentManeuverIndexProvider);
+                final inst =
+                    (enrichedRoute != null &&
+                        prevIdx < enrichedRoute.enrichedManeuvers.length)
+                    ? enrichedRoute.enrichedManeuvers[prevIdx].localizedInstruction
+                    : (route != null && prevIdx < route.maneuvers.length)
+                    ? route.maneuvers[prevIdx].instruction
+                    : nextInstruction;
+                ref
+                    .read(voiceGuideProvider)
+                    .say(inst, language: activeLang);
+              },
+              onPlayVoice: () {
+                final textToPlay = voiceGuide.banner.value.isNotEmpty
+                    ? voiceGuide.banner.value
+                    : nextInstruction;
+                ref
+                    .read(voiceGuideProvider)
+                    .say(textToPlay, language: activeLang);
+                final soundId = currentEnriched?.audioSoundId;
+                final audioUrl = currentEnriched?.audioUrl;
+                AppSnackbar.showInfo(
+                  context,
+                  title: 'Consigne vocale (${activeLang.toUpperCase()})',
+                  message:
+                      '📢 "$textToPlay"${audioUrl != null ? " • Audio: $soundId.wav" : ""}',
+                );
+              },
+              onReportHazard: () {
+                ReportIncidentModal.show(context);
+              },
+              onStopNavigation: _confirmAndStopNavigation,
             );
           },
-          onReportHazard: () {
-            ReportIncidentModal.show(context);
-          },
-          onStopNavigation: _confirmAndStopNavigation,
         );
     }
   }

@@ -3,7 +3,6 @@ import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 
 enum FasoNavTab {
   explorer,
-  itineraires,
   sauvegardes,
   compte,
   admin,
@@ -50,12 +49,6 @@ class FasoNavBottomBar extends StatelessWidget {
                 label: 'Explorer',
                 icon: Icons.explore_outlined,
                 activeIcon: Icons.explore_rounded,
-              ),
-              _buildNavItem(
-                tab: FasoNavTab.itineraires,
-                label: 'Itinéraires',
-                icon: Icons.alt_route_outlined,
-                activeIcon: Icons.alt_route_rounded,
               ),
               _buildNavItem(
                 tab: FasoNavTab.sauvegardes,

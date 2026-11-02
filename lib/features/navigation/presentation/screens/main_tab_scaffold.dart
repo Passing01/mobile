@@ -7,7 +7,6 @@ import 'package:qvgestion_mobile/features/map/presentation/screens/home_map_scre
 import 'package:qvgestion_mobile/features/navigation/presentation/providers/navigation_providers.dart';
 import 'package:qvgestion_mobile/features/navigation/presentation/widgets/faso_nav_bottom_bar.dart';
 import 'package:qvgestion_mobile/features/offline/presentation/screens/saved_places_screen.dart';
-import 'package:qvgestion_mobile/features/routes/presentation/screens/routes_screen.dart';
 
 /// Écran conteneur principal gérant la barre de navigation officielle Faso Nav
 /// L'onglet Administration est réservé aux comptes avec le rôle Administrateur/Modérateur.
@@ -30,7 +29,6 @@ class MainTabScaffold extends ConsumerWidget {
         index: effectiveTab.index,
         children: [
           const HomeMapScreen(),
-          const RoutesScreen(),
           const SavedPlacesScreen(),
           const AccountScreen(),
           if (isAdmin) const AdminScreen() else const SizedBox.shrink(),

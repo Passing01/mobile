@@ -302,6 +302,32 @@ class RouteModel extends Equatable {
     );
   }
 
+  RouteModel copyWith({
+    String? mode,
+    double? distanceMeters,
+    int? durationSeconds,
+    String? durationFormatted,
+    int? legs,
+    List<List<double>>? geometry,
+    List<double>? boundingBox,
+    List<ManeuverModel>? maneuvers,
+    String? engine,
+    int? startSnapM,
+  }) {
+    return RouteModel(
+      mode: mode ?? this.mode,
+      distanceMeters: distanceMeters ?? this.distanceMeters,
+      durationSeconds: durationSeconds ?? this.durationSeconds,
+      durationFormatted: durationFormatted ?? this.durationFormatted,
+      legs: legs ?? this.legs,
+      geometry: geometry ?? this.geometry,
+      boundingBox: boundingBox ?? this.boundingBox,
+      maneuvers: maneuvers ?? this.maneuvers,
+      engine: engine ?? this.engine,
+      startSnapM: startSnapM ?? this.startSnapM,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'mode': mode,

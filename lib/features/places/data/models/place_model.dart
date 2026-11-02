@@ -32,6 +32,7 @@ class PlaceModel extends Equatable {
   final int confidence; // 3 relevé terrain, 2 déduit d'une source ouverte, 1 incertain
   final String source; // admin | survey | user | osm | overture | foursquare
   final Map<String, dynamic> tags; // {"de_garde": true, "open_24_7": true}
+  final String? nameTts; // Correction phonétique pour synthèse vocale (Étape 9)
 
   const PlaceModel({
     required this.id,
@@ -58,6 +59,7 @@ class PlaceModel extends Equatable {
     this.confidence = 2,
     this.source = 'admin',
     this.tags = const {},
+    this.nameTts,
   });
 
   factory PlaceModel.fromJson(Map<String, dynamic> json) {
@@ -147,6 +149,7 @@ class PlaceModel extends Equatable {
       confidence: (json['confidence'] as num?)?.toInt() ?? 2,
       source: (json['source'] as String?) ?? 'admin',
       tags: parsedTags,
+      nameTts: (json['name_tts'] as String?) ?? (json['nameTts'] as String?),
     );
   }
 
@@ -237,6 +240,7 @@ class PlaceModel extends Equatable {
       'confidence': confidence,
       'source': source,
       if (tags.isNotEmpty) 'tags': tags,
+      if (nameTts != null) 'name_tts': nameTts,
     };
   }
 
@@ -304,6 +308,7 @@ class PlaceModel extends Equatable {
     int? confidence,
     String? source,
     Map<String, dynamic>? tags,
+    String? nameTts,
   }) {
     return PlaceModel(
       id: id ?? this.id,
@@ -330,6 +335,7 @@ class PlaceModel extends Equatable {
       confidence: confidence ?? this.confidence,
       source: source ?? this.source,
       tags: tags ?? this.tags,
+      nameTts: nameTts ?? this.nameTts,
     );
   }
 
@@ -399,5 +405,6 @@ class PlaceModel extends Equatable {
         confidence,
         source,
         tags,
+        nameTts,
       ];
 }

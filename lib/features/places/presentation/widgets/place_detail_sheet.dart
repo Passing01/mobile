@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/core/widgets/loaders/app_shimmer.dart';
@@ -403,7 +404,32 @@ class PlaceDetailSheet extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
 
-            // Bouton 3 : Signaler un problème
+            // Bouton 3 : Partager la position
+            IconButton.filledTonal(
+              key: const Key('btn_place_share'),
+              tooltip: 'Partager le lieu',
+              onPressed: () {
+                final text = '📍 ${place.nom}\n'
+                    '${place.description != null ? "${place.description}\n" : ""}'
+                    'Coordonnées : ${place.latitude.toStringAsFixed(5)}, ${place.longitude.toStringAsFixed(5)}\n'
+                    'https://maps.google.com/?q=${place.latitude},${place.longitude}';
+                SharePlus.instance.share(
+                  ShareParams(
+                    text: text,
+                    subject: 'Partage de position : ${place.nom}',
+                  ),
+                );
+              },
+              icon: const Icon(Icons.share_rounded, size: 18, color: Color(0xFF0F766E)),
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFFF0FDFA),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                padding: const EdgeInsets.all(12),
+              ),
+            ),
+            const SizedBox(width: 8),
+
+            // Bouton 4 : Signaler un problème
             IconButton.filledTonal(
               key: const Key('btn_place_report'),
               tooltip: 'Signaler un problème',

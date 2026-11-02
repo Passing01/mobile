@@ -53,6 +53,7 @@ dependencies:
   web_socket_channel: ^3.0.3
   flutter_dotenv: ^6.0.1
   url_launcher: ^6.3.3
+  share_plus: ^13.3.1
 
 dev_dependencies:
   flutter_test:
@@ -80,6 +81,10 @@ flutter:
   assets:
     - .env
     - assets/map/styles/
+    - assets/audio/voice/
+    - assets/audio/voiceP2/
+    - assets/audio/mos/
+    - assets/audio/diu/
 
 
   # An image asset can refer to one or more resolution-specific "variants", see

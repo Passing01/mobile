@@ -15,6 +15,7 @@ class FasoMap extends StatefulWidget {
     this.onLongPress,
     this.onCameraIdle,
     this.attributionText = '© OpenStreetMap contributors',
+    this.showAttribution = false,
     this.onAttributionTap,
     this.myLocationEnabled = false,
     this.myLocationTrackingMode = MyLocationTrackingMode.none,
@@ -38,6 +39,9 @@ class FasoMap extends StatefulWidget {
 
   /// Libellé officiel d'attribution OpenStreetMap
   final String attributionText;
+
+  /// Affichage du badge d'attribution sur la carte
+  final bool showAttribution;
 
   /// Action lors du clic sur l'attribution (ouvre la modale des crédits par défaut)
   final VoidCallback? onAttributionTap;
@@ -167,8 +171,9 @@ class _FasoMapState extends State<FasoMap> {
             onCameraIdle: widget.onCameraIdle,
           ),
 
-        // Badge officiel d'attribution OpenStreetMap visible et cliquable
-        Positioned(
+        // Badge officiel d'attribution OpenStreetMap (masqué par défaut sur l'interface épurée)
+        if (widget.showAttribution)
+          Positioned(
           left: 14,
           bottom: 120,
           child: GestureDetector(
