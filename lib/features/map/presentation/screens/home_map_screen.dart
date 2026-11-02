@@ -314,34 +314,45 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       if (_placesCancelToken != myToken) return;
 
       final features = (data['features'] as List<dynamic>?) ?? [];
-      final n = features.length;
+      final onlyDeGarde = ref.read(onlyDeGardeFilterProvider);
+
+      final filteredFeatures = <dynamic>[];
+      final placesList = <PlaceModel>[];
+      for (final f in features) {
+        if (f is Map) {
+          try {
+            final p = PlaceModel.fromGeoJsonFeature(Map<dynamic, dynamic>.from(f));
+            if (onlyDeGarde) {
+              final isPharmacie = (p.categorie?.slug ?? '').toLowerCase().contains('pharmacie') ||
+                  p.nom.toLowerCase().contains('pharmacie');
+              if (isPharmacie && !p.isDeGarde) continue;
+            }
+            placesList.add(p);
+            filteredFeatures.add(f);
+          } catch (_) {}
+        }
+      }
+
+      final n = filteredFeatures.length;
       final meta = data['meta'] as Map<String, dynamic>?;
       final truncated = meta?['truncated'] == true;
       final isOffline = data['is_offline'] == true;
 
       AppLogger.i(
-        '[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline)',
+        '[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline, onlyDeGarde=$onlyDeGarde)',
       );
       debugPrint(
-        '[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline)',
+        '[PLACES] categories=${cats.join(',')} bbox=$bbox -> $n lieux (offline=$isOffline, onlyDeGarde=$onlyDeGarde)',
       );
       DebugInfo.instance.setLastApiError(null);
 
-      // Ne pas vider la carte si aucun filtre n'est actif et que la réponse transitoire est vide
-      if (n > 0 || cats.isNotEmpty) {
-        await mapService.showPlaces(data);
-      }
+      final cleanMapData = {
+        'type': 'FeatureCollection',
+        'features': filteredFeatures,
+      };
 
-      final placesList = <PlaceModel>[];
-      for (final f in features) {
-        if (f is Map) {
-          try {
-            placesList.add(
-              PlaceModel.fromGeoJsonFeature(Map<dynamic, dynamic>.from(f)),
-            );
-          } catch (_) {}
-        }
-      }
+      // Toujours rafraîchir la carte avec les données assainies
+      await mapService.showPlaces(cleanMapData);
 
       String? catLabel;
       final allCats = ref.read(categoriesProvider).value ?? [];
@@ -1284,6 +1295,11 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
 
     // Synchronisation de l'état des catégories vers le chargeur de lieux
     ref.listen<Set<String>>(selectedCategoriesProvider, (previous, next) {
+      _refreshPlaces();
+    });
+
+    // Synchronisation du filtre spécifique pharmacies de garde
+    ref.listen<bool>(onlyDeGardeFilterProvider, (previous, next) {
       _refreshPlaces();
     });
 

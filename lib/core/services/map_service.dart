@@ -76,6 +76,7 @@ class MapLibreMapService implements MapService {
   static const String placesSourceId = 'places';
   static const String placesClusterLayerId = 'places-clusters';
   static const String placesClusterCountLayerId = 'places-cluster-count';
+  static const String placesCirclesLayerId = 'places-pin-circles';
   static const String placesPointsLayerId = 'places-points';
   static const String placesLabelsLayerId = 'places-labels';
 
@@ -272,16 +273,17 @@ class MapLibreMapService implements MapService {
       } catch (_) {}
 
       // 1. Initialisation de la source des lieux avec grappes (clustering conforme Étape 4)
-      final placesData =
+      final rawPlacesData =
           _cachedPlacesGeoJson ?? _buildPlacesGeoJson(_cachedPlaces);
+      final placesData = _cleanPlacesGeoJson(rawPlacesData);
       await _safeAddGeoJsonSource(
         c,
         existingSources,
         placesSourceId,
         placesData,
         cluster: true,
-        clusterRadius: 48.0,
-        clusterMaxZoom: 14.0,
+        clusterRadius: 36.0,
+        clusterMaxZoom: 12.0,
       );
 
       // Couche des grappes (cercles bleu foncé avec contour blanc et rayon adaptatif)
@@ -334,6 +336,29 @@ class MapLibreMapService implements MapService {
         AppLogger.w('Enregistrement des icônes pins: $e');
       }
 
+      // Couche des repères circulaires (point coloré haute fiabilité)
+      await _safeAddCircleLayer(
+        c,
+        existingLayers,
+        placesSourceId,
+        placesCirclesLayerId,
+        const CircleLayerProperties(
+          circleColor: [
+            Expressions.coalesce,
+            [Expressions.get, 'color'],
+            '#2563EB',
+          ],
+          circleRadius: 6.5,
+          circleStrokeColor: '#FFFFFF',
+          circleStrokeWidth: 2.0,
+        ),
+        filter: [
+          '!',
+          [Expressions.has, 'point_count'],
+        ],
+        enableInteraction: false,
+      );
+
       // Couche des lieux : icône Maps de catégorie avec push/badge en haut affichant le nom
       await _safeAddSymbolLayer(
         c,
@@ -342,42 +367,21 @@ class MapLibreMapService implements MapService {
         placesPointsLayerId,
         const SymbolLayerProperties(
           iconImage: [
-            Expressions.match,
-            [
-              Expressions.coalesce,
-              [Expressions.get, 'category_slug'],
-              [Expressions.get, 'category'],
-              '',
-            ],
-            'pharmacie',
-            'pin-pharmacie',
-            'station-service',
-            'pin-station-service',
-            'maquis-restaurant',
-            'pin-maquis-restaurant',
-            'hopital-sante',
-            'pin-hopital-sante',
-            'banque-distributeur',
-            'pin-banque-distributeur',
-            'administration',
-            'pin-administration',
-            'ecole-universite',
-            'pin-ecole-universite',
-            'marche-commerce',
-            'pin-marche-commerce',
+            Expressions.coalesce,
+            [Expressions.get, 'icon'],
             'pin-default',
           ],
-          iconSize: 0.70,
+          iconSize: 0.65,
           iconAnchor: 'bottom',
           iconAllowOverlap: true,
+          iconOptional: true,
           textField: [Expressions.get, 'name'],
-          textSize: 11.5,
+          textSize: 11.0,
           textColor: '#0F172A',
           textHaloColor: '#FFFFFF',
           textHaloWidth: 2.2,
-          textAnchor: 'bottom',
-          textOffset: [0, -3.2],
-          textFont: ['Noto Sans Bold'],
+          textAnchor: 'top',
+          textOffset: [0, 0.4],
           textAllowOverlap: false,
           textOptional: true,
         ),
@@ -663,12 +667,13 @@ class MapLibreMapService implements MapService {
 
   @override
   Future<void> showPlaces(Map<String, dynamic> featureCollection) async {
-    _cachedPlacesGeoJson = featureCollection;
+    final clean = _cleanPlacesGeoJson(featureCollection);
+    _cachedPlacesGeoJson = clean;
     final c = _controller;
     if (c == null || !_layersConfigured) return;
 
     try {
-      await c.setGeoJsonSource(placesSourceId, featureCollection);
+      await c.setGeoJsonSource(placesSourceId, clean);
     } catch (e) {
       AppLogger.w('Mise à jour source places MapLibre: $e');
     }
@@ -857,6 +862,7 @@ class MapLibreMapService implements MapService {
 
       final features = await c.queryRenderedFeaturesInRect(touchBox, [
         placesPointsLayerId,
+        placesCirclesLayerId,
       ], null);
 
       if (features.isNotEmpty) {
@@ -905,6 +911,7 @@ class MapLibreMapService implements MapService {
 
       final raw = await c.queryRenderedFeaturesInRect(rect, [
         placesPointsLayerId,
+        placesCirclesLayerId,
         placesClusterLayerId,
       ], null);
 
@@ -1007,6 +1014,90 @@ class MapLibreMapService implements MapService {
   void dispose() {
     _controller = null;
     _layersConfigured = false;
+  }
+
+  Map<String, dynamic> _cleanPlacesGeoJson(dynamic raw) {
+    if (raw is! Map) {
+      return const {'type': 'FeatureCollection', 'features': []};
+    }
+    final rawFeatures = raw['features'];
+    if (rawFeatures is! List) {
+      return const {'type': 'FeatureCollection', 'features': []};
+    }
+
+    final cleanFeatures = <Map<String, dynamic>>[];
+    for (final f in rawFeatures) {
+      if (f is! Map) continue;
+      final geom = f['geometry'];
+      if (geom is! Map) continue;
+      final coords = geom['coordinates'];
+      if (coords is! List || coords.length < 2) continue;
+      final lon = (coords[0] as num?)?.toDouble();
+      final lat = (coords[1] as num?)?.toDouble();
+      if (lon == null || lat == null || !lon.isFinite || !lat.isFinite) continue;
+
+      final props = f['properties'] is Map
+          ? Map<String, dynamic>.from(f['properties'] as Map)
+          : <String, dynamic>{};
+      final cat = (props['category_slug'] ??
+              props['category'] ??
+              props['categorie_slug'] ??
+              'divers')
+          .toString();
+      final name = (props['name'] ?? props['nom'] ?? 'Lieu').toString();
+      final id = (props['id'] ?? f['id'] ?? name).toString();
+      final color = props['color']?.toString() ?? MapTheme.colorForCategory(cat);
+      final iconName = _pinIconForCategory(cat);
+
+      cleanFeatures.add({
+        'type': 'Feature',
+        'id': id,
+        'geometry': {
+          'type': 'Point',
+          'coordinates': [lon, lat],
+        },
+        'properties': {
+          'id': id,
+          'name': name,
+          'nom': name,
+          'category': cat,
+          'category_slug': cat,
+          'color': color,
+          'strokeColor': '#FFFFFF',
+          'icon': iconName,
+        },
+      });
+    }
+
+    return {
+      'type': 'FeatureCollection',
+      'features': cleanFeatures,
+    };
+  }
+
+  String _pinIconForCategory(String? slug) {
+    final s = (slug ?? '').toLowerCase().trim();
+    if (s.contains('pharmacie')) return 'pin-pharmacie';
+    if (s.contains('station')) return 'pin-station-service';
+    if (s.contains('maquis') || s.contains('resto') || s.contains('restaurant')) {
+      return 'pin-maquis-restaurant';
+    }
+    if (s.contains('hopital') || s.contains('sante') || s.contains('clinique') || s.contains('csps')) {
+      return 'pin-hopital-sante';
+    }
+    if (s.contains('banque') || s.contains('distributeur') || s.contains('atm')) {
+      return 'pin-banque-distributeur';
+    }
+    if (s.contains('administration') || s.contains('mairie') || s.contains('police')) {
+      return 'pin-administration';
+    }
+    if (s.contains('ecole') || s.contains('universite') || s.contains('lycee') || s.contains('college')) {
+      return 'pin-ecole-universite';
+    }
+    if (s.contains('marche') || s.contains('commerce') || s.contains('boutique') || s.contains('alimentation')) {
+      return 'pin-marche-commerce';
+    }
+    return 'pin-default';
   }
 
   Map<String, dynamic> _buildPlacesGeoJson(List<PlaceModel> places) {

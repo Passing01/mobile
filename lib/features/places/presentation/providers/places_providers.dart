@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:qvgestion_mobile/core/config/app_config.dart';
 import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
 import 'package:qvgestion_mobile/core/services/location_service.dart';
@@ -372,6 +371,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625360000',
     horaires: '24h/24',
     distanceMeters: 0,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -406,14 +406,14 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     id: 4,
     nom: 'Grand Marché Rood-Woko',
     description: 'Grand marché central et pôle commercial historique',
-    categorieId: 3,
+    categorieId: 8,
     latitude: 12.3685,
     longitude: -1.5222,
     ville: 'Ouagadougou',
     quartier: 'Centre-Ville',
     horaires: '07h - 18h',
     distanceMeters: 2540,
-    categorie: CategoryModel(id: 3, nom: 'Marché / Commerce', slug: 'maquis-restaurant', icone: 'storefront'),
+    categorie: CategoryModel(id: 8, nom: 'Marché / Commerce', slug: 'marche-commerce', icone: 'storefront'),
   ),
   PlaceModel(
     id: 5,
@@ -440,7 +440,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     quartier: 'Ouaga 2000',
     horaires: '08h - 18h',
     distanceMeters: 5900,
-    categorie: CategoryModel(id: 5, nom: 'Site Culturel', slug: 'patrimoine', icone: 'account_balance'),
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'account_balance'),
   ),
   PlaceModel(
     id: 7,
@@ -452,20 +452,20 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     ville: 'Ouagadougou',
     quartier: 'Centre-Ville',
     distanceMeters: 3100,
-    categorie: CategoryModel(id: 5, nom: 'Place Publique', slug: 'patrimoine', icone: 'flag'),
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'flag'),
   ),
   PlaceModel(
     id: 8,
     nom: 'Université Joseph Ki-Zerbo',
     description: 'Campus principal universitaire de Zogona',
-    categorieId: 5,
+    categorieId: 7,
     latitude: 12.3760,
     longitude: -1.5010,
     ville: 'Ouagadougou',
     quartier: 'Zogona',
     horaires: '07h - 20h',
     distanceMeters: 850,
-    categorie: CategoryModel(id: 5, nom: 'Éducation', slug: 'patrimoine', icone: 'school'),
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
   ),
   PlaceModel(
     id: 9,
@@ -477,7 +477,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     ville: 'Ouagadougou',
     quartier: 'Wemtenga',
     distanceMeters: 2400,
-    categorie: CategoryModel(id: 5, nom: 'Exposition', slug: 'patrimoine', icone: 'palette'),
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'palette'),
   ),
   PlaceModel(
     id: 10,
@@ -505,6 +505,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625341234',
     horaires: '24h/24',
     distanceMeters: 4800,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -518,7 +519,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     quartier: 'Koulouba',
     horaires: '08h - 17h',
     distanceMeters: 1550,
-    categorie: CategoryModel(id: 5, nom: 'Mémorial', slug: 'patrimoine', icone: 'museum'),
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'museum'),
   ),
   PlaceModel(
     id: 13,
@@ -532,6 +533,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625306641',
     horaires: '24h/24',
     distanceMeters: 2100,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -546,6 +548,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625362020',
     horaires: '24h/24',
     distanceMeters: 1800,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -560,6 +563,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625350033',
     horaires: '24h/24',
     distanceMeters: 2400,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -574,6 +578,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625430101',
     horaires: '24h/24',
     distanceMeters: 3900,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -588,6 +593,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625370202',
     horaires: '24h/24',
     distanceMeters: 5100,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -602,6 +608,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625374444',
     horaires: '24h/24',
     distanceMeters: 5400,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -658,6 +665,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625400011',
     horaires: '24h/24',
     distanceMeters: 120,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -700,6 +708,7 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     telephone: '+22625430044',
     horaires: '24h/24',
     distanceMeters: 1400,
+    tags: {'de_garde': true},
     categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
   ),
   PlaceModel(
@@ -730,22 +739,795 @@ const List<PlaceModel> defaultOuagaIconicPlaces = [
     distanceMeters: 550,
     categorie: CategoryModel(id: 3, nom: 'Maquis / Resto', slug: 'maquis-restaurant', icone: 'restaurant'),
   ),
+  // --- Boutiques, Supermarchés, Alimentations & Marchés de Ouaga ---
+  PlaceModel(
+    id: 28,
+    nom: 'Marina Market Koulouba',
+    description: 'Grand supermarché, alimentation générale et produits frais',
+    categorieId: 8,
+    latitude: 12.3670,
+    longitude: -1.5210,
+    ville: 'Ouagadougou',
+    quartier: 'Koulouba',
+    horaires: '08h - 22h',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'shopping_basket'),
+  ),
+  PlaceModel(
+    id: 29,
+    nom: 'Marina Market Ouaga 2000',
+    description: 'Supermarché moderne, boulangerie et produits importés',
+    categorieId: 8,
+    latitude: 12.3230,
+    longitude: -1.5110,
+    ville: 'Ouagadougou',
+    quartier: 'Ouaga 2000',
+    horaires: '08h - 22h',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'shopping_basket'),
+  ),
+  PlaceModel(
+    id: 30,
+    nom: 'Alimentation La Surface',
+    description: 'Alimentation libre-service centrale, boissons et épicerie',
+    categorieId: 8,
+    latitude: 12.3645,
+    longitude: -1.5165,
+    ville: 'Ouagadougou',
+    quartier: 'Kwame N\'Krumah',
+    horaires: '07h30 - 23h',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'storefront'),
+  ),
+  PlaceModel(
+    id: 31,
+    nom: 'Supermarché Scimas',
+    description: 'Commerce de référence, alimentation et équipement',
+    categorieId: 8,
+    latitude: 12.3665,
+    longitude: -1.5235,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    horaires: '08h - 20h',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'shopping_cart'),
+  ),
+  PlaceModel(
+    id: 32,
+    nom: 'Alimentation Le Bon Samaritain',
+    description: 'Boutique d\'alimentation générale de quartier, dépôt de pain',
+    categorieId: 8,
+    latitude: 12.3890,
+    longitude: -1.4980,
+    ville: 'Ouagadougou',
+    quartier: 'Somgandé',
+    horaires: '07h - 23h',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'storefront'),
+  ),
+  PlaceModel(
+    id: 33,
+    nom: 'Alimentation du Bon Berger',
+    description: 'Épicerie, alimentation générale et produits du quotidien',
+    categorieId: 8,
+    latitude: 12.3490,
+    longitude: -1.5590,
+    ville: 'Ouagadougou',
+    quartier: 'Pissy',
+    horaires: '07h - 22h30',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'storefront'),
+  ),
+  PlaceModel(
+    id: 34,
+    nom: 'Marché Sankaryare',
+    description: 'Grand marché populaire de gros et détail de Paspanga',
+    categorieId: 8,
+    latitude: 12.3785,
+    longitude: -1.5160,
+    ville: 'Ouagadougou',
+    quartier: 'Paspanga',
+    horaires: '06h30 - 18h30',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'storefront'),
+  ),
+  PlaceModel(
+    id: 35,
+    nom: 'Marché 10 Yaar',
+    description: 'Marché animé des 1200 Logements et Wemtenga',
+    categorieId: 8,
+    latitude: 12.3640,
+    longitude: -1.4990,
+    ville: 'Ouagadougou',
+    quartier: '1200 Logements',
+    horaires: '07h - 19h',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'storefront'),
+  ),
+  PlaceModel(
+    id: 36,
+    nom: 'Marché de Nabi Yaar',
+    description: 'Marché de quartier vivant de Dassasgho',
+    categorieId: 8,
+    latitude: 12.3580,
+    longitude: -1.4880,
+    ville: 'Ouagadougou',
+    quartier: 'Dassasgho',
+    horaires: '07h - 19h',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'storefront'),
+  ),
+  PlaceModel(
+    id: 37,
+    nom: 'Marché de Gounghin',
+    description: 'Marché historique de vivres et artisanat de Gounghin',
+    categorieId: 8,
+    latitude: 12.3540,
+    longitude: -1.5450,
+    ville: 'Ouagadougou',
+    quartier: 'Gounghin',
+    horaires: '07h - 19h',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'storefront'),
+  ),
+  PlaceModel(
+    id: 38,
+    nom: 'Marché de Tampouy',
+    description: 'Pôle commercial majeur de l\'arrondissement de Sig-Noghin',
+    categorieId: 8,
+    latitude: 12.3950,
+    longitude: -1.5480,
+    ville: 'Ouagadougou',
+    quartier: 'Tampouy',
+    horaires: '07h - 19h',
+    categorie: CategoryModel(id: 8, nom: 'Marché / Boutique', slug: 'marche-commerce', icone: 'storefront'),
+  ),
+  // --- Écoles, Lycées & Universités de Ouagadougou ---
+  PlaceModel(
+    id: 39,
+    nom: 'Université Thomas Sankara',
+    description: 'Grand campus universitaire de Saaba / Route de Fada',
+    categorieId: 7,
+    latitude: 12.3720,
+    longitude: -1.4350,
+    ville: 'Ouagadougou',
+    quartier: 'Saaba',
+    horaires: '07h30 - 19h',
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
+  ),
+  PlaceModel(
+    id: 40,
+    nom: 'Lycée Philippe Zinda Kaboré',
+    description: 'Grand lycée public historique au cœur de Ouaga',
+    categorieId: 7,
+    latitude: 12.3660,
+    longitude: -1.5260,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    horaires: '07h - 17h',
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
+  ),
+  PlaceModel(
+    id: 41,
+    nom: 'Lycée de Bogodogo',
+    description: 'Lycée départemental et pôle éducatif de l\'Est',
+    categorieId: 7,
+    latitude: 12.3620,
+    longitude: -1.4910,
+    ville: 'Ouagadougou',
+    quartier: 'Dassasgho',
+    horaires: '07h - 17h',
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
+  ),
+  PlaceModel(
+    id: 42,
+    nom: 'Lycée Nelson Mandela',
+    description: 'Lycée d\'enseignement général et technique réputé',
+    categorieId: 7,
+    latitude: 12.3710,
+    longitude: -1.5120,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    horaires: '07h - 17h',
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
+  ),
+  PlaceModel(
+    id: 43,
+    nom: 'Lycée Marien N\'Gouabi',
+    description: 'Établissement scolaire public de référence à Gounghin',
+    categorieId: 7,
+    latitude: 12.3600,
+    longitude: -1.5390,
+    ville: 'Ouagadougou',
+    quartier: 'Gounghin',
+    horaires: '07h - 17h',
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
+  ),
+  PlaceModel(
+    id: 44,
+    nom: 'Collège Saint Jean-Baptiste de La Salle',
+    description: 'Collège et lycée d\'enseignement catholique réputé',
+    categorieId: 7,
+    latitude: 12.3640,
+    longitude: -1.5200,
+    ville: 'Ouagadougou',
+    quartier: 'Koulouba',
+    horaires: '07h - 17h30',
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
+  ),
+  PlaceModel(
+    id: 45,
+    nom: 'ENAM (École Nat. d\'Administration et de Magistrature)',
+    description: 'Grande école de formation des cadres de l\'État',
+    categorieId: 7,
+    latitude: 12.3730,
+    longitude: -1.5190,
+    ville: 'Ouagadougou',
+    quartier: 'Koulouba',
+    horaires: '07h30 - 18h',
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
+  ),
+  PlaceModel(
+    id: 46,
+    nom: 'ISIG International',
+    description: 'Institut supérieur d\'informatique et de gestion',
+    categorieId: 7,
+    latitude: 12.3670,
+    longitude: -1.4960,
+    ville: 'Ouagadougou',
+    quartier: '1200 Logements',
+    horaires: '08h - 19h',
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
+  ),
+  PlaceModel(
+    id: 47,
+    nom: 'Institut 2iE (Eau et Environnement)',
+    description: 'Grande école d\'ingénieurs inter-États',
+    categorieId: 7,
+    latitude: 12.3680,
+    longitude: -1.5140,
+    ville: 'Ouagadougou',
+    quartier: 'Koulouba',
+    horaires: '08h - 18h',
+    categorie: CategoryModel(id: 7, nom: 'École & Université', slug: 'ecole-universite', icone: 'school'),
+  ),
+  // --- Administrations & Bâtiments publics de Ouagadougou ---
+  PlaceModel(
+    id: 48,
+    nom: 'Mairie Centrale de Ouagadougou',
+    description: 'Hôtel de ville central et services municipaux',
+    categorieId: 5,
+    latitude: 12.3675,
+    longitude: -1.5255,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    horaires: '07h30 - 16h',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 49,
+    nom: 'Mairie de Baskuy (Arrondissement 1)',
+    description: 'Mairie d\'arrondissement, état civil et légalisations',
+    categorieId: 5,
+    latitude: 12.3725,
+    longitude: -1.5240,
+    ville: 'Ouagadougou',
+    quartier: 'Baskuy',
+    horaires: '07h30 - 16h',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 50,
+    nom: 'Mairie de Bogodogo',
+    description: 'Mairie d\'arrondissement du secteur Est',
+    categorieId: 5,
+    latitude: 12.3550,
+    longitude: -1.4850,
+    ville: 'Ouagadougou',
+    quartier: 'Dassasgho',
+    horaires: '07h30 - 16h',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 51,
+    nom: 'Mairie de Boulmiougou',
+    description: 'Mairie d\'arrondissement du secteur Ouest',
+    categorieId: 5,
+    latitude: 12.3470,
+    longitude: -1.5520,
+    ville: 'Ouagadougou',
+    quartier: 'Pissy',
+    horaires: '07h30 - 16h',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 52,
+    nom: 'Mairie de Nongr-Maasom',
+    description: 'Mairie d\'arrondissement du secteur Nord-Est',
+    categorieId: 5,
+    latitude: 12.3920,
+    longitude: -1.5010,
+    ville: 'Ouagadougou',
+    quartier: 'Somgandé',
+    horaires: '07h30 - 16h',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 53,
+    nom: 'Mairie de Sig-Noghin',
+    description: 'Mairie d\'arrondissement du secteur Nord',
+    categorieId: 5,
+    latitude: 12.4010,
+    longitude: -1.5510,
+    ville: 'Ouagadougou',
+    quartier: 'Tampouy',
+    horaires: '07h30 - 16h',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 54,
+    nom: 'Primature du Burkina Faso',
+    description: 'Siège du Premier Ministère et du Gouvernement',
+    categorieId: 5,
+    latitude: 12.3685,
+    longitude: -1.5175,
+    ville: 'Ouagadougou',
+    quartier: 'Koulouba',
+    horaires: '07h30 - 16h',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 55,
+    nom: 'Commissariat Central de Police',
+    description: 'Commissariat central de police de Ouagadougou',
+    categorieId: 5,
+    latitude: 12.3690,
+    longitude: -1.5250,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    telephone: '+22625306101',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'local_police'),
+  ),
+  PlaceModel(
+    id: 56,
+    nom: 'Palais de Justice de Ouagadougou',
+    description: 'Tribunal de Grande Instance et Cours de justice',
+    categorieId: 5,
+    latitude: 12.3668,
+    longitude: -1.5280,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    horaires: '07h30 - 16h',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'gavel'),
+  ),
+  PlaceModel(
+    id: 57,
+    nom: 'RTB Télévision Nationale',
+    description: 'Siège de la Radiodiffusion Télévision du Burkina',
+    categorieId: 5,
+    latitude: 12.3660,
+    longitude: -1.5220,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 5, nom: 'Administration', slug: 'administration', icone: 'tv'),
+  ),
+  // --- Pharmacies de jour et de quartier (non de garde) ---
+  PlaceModel(
+    id: 58,
+    nom: 'Pharmacie Nouvelle',
+    description: 'Pharmacie moderne sur l\'avenue Kwame N\'Krumah',
+    categorieId: 1,
+    latitude: 12.3654,
+    longitude: -1.5173,
+    ville: 'Ouagadougou',
+    quartier: 'Koulouba',
+    telephone: '+22625306641',
+    horaires: '07h30 - 22h',
+    tags: {'de_garde': false},
+    categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
+  ),
+  PlaceModel(
+    id: 59,
+    nom: 'Pharmacie Wend-Kuuni',
+    description: 'Pharmacie accessible près de l\'Université Ki-Zerbo',
+    categorieId: 1,
+    latitude: 12.3780,
+    longitude: -1.4885,
+    ville: 'Ouagadougou',
+    quartier: 'Dassasgho',
+    telephone: '+22625360022',
+    horaires: '07h30 - 22h',
+    tags: {'de_garde': false},
+    categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
+  ),
+  PlaceModel(
+    id: 60,
+    nom: 'Pharmacie Hosanna',
+    description: 'Officine pharmaceutique de la Patte d\'Oie',
+    categorieId: 1,
+    latitude: 12.3360,
+    longitude: -1.5230,
+    ville: 'Ouagadougou',
+    quartier: 'Patte d\'Oie',
+    telephone: '+22625371234',
+    horaires: '07h30 - 21h30',
+    tags: {'de_garde': false},
+    categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
+  ),
+  PlaceModel(
+    id: 61,
+    nom: 'Pharmacie de Pissy',
+    description: 'Pharmacie de proximité du quartier Pissy / Route de Bobo',
+    categorieId: 1,
+    latitude: 12.3480,
+    longitude: -1.5580,
+    ville: 'Ouagadougou',
+    quartier: 'Pissy',
+    telephone: '+22625430055',
+    horaires: '07h30 - 22h',
+    tags: {'de_garde': false},
+    categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
+  ),
+  PlaceModel(
+    id: 62,
+    nom: 'Pharmacie Kamboinsin',
+    description: 'Officine sur la RN2 route de Ouahigouya',
+    categorieId: 1,
+    latitude: 12.4480,
+    longitude: -1.5530,
+    ville: 'Ouagadougou',
+    quartier: 'Kamboinsin',
+    telephone: '+22625410066',
+    horaires: '07h30 - 21h30',
+    tags: {'de_garde': false},
+    categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
+  ),
+  PlaceModel(
+    id: 63,
+    nom: 'Pharmacie Liptako',
+    description: 'Pharmacie de quartier de Karpala',
+    categorieId: 1,
+    latitude: 12.3270,
+    longitude: -1.4720,
+    ville: 'Ouagadougou',
+    quartier: 'Karpala',
+    telephone: '+22625380077',
+    horaires: '07h30 - 22h',
+    tags: {'de_garde': false},
+    categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
+  ),
+  PlaceModel(
+    id: 64,
+    nom: 'Pharmacie Espoir Saaba',
+    description: 'Pharmacie accessible de la commune de Saaba',
+    categorieId: 1,
+    latitude: 12.3680,
+    longitude: -1.4420,
+    ville: 'Ouagadougou',
+    quartier: 'Saaba',
+    telephone: '+22625490088',
+    horaires: '07h30 - 22h',
+    tags: {'de_garde': false},
+    categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
+  ),
+  PlaceModel(
+    id: 65,
+    nom: 'Pharmacie Dag-Noen',
+    description: 'Officine de quartier du secteur Dag-Noen',
+    categorieId: 1,
+    latitude: 12.3730,
+    longitude: -1.4780,
+    ville: 'Ouagadougou',
+    quartier: 'Dag-Noen',
+    telephone: '+22625361199',
+    horaires: '07h30 - 21h30',
+    tags: {'de_garde': false},
+    categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
+  ),
+  PlaceModel(
+    id: 66,
+    nom: 'Pharmacie Saint-François Tanghin',
+    description: 'Pharmacie de proximité du quartier Tanghin',
+    categorieId: 1,
+    latitude: 12.3910,
+    longitude: -1.5170,
+    ville: 'Ouagadougou',
+    quartier: 'Tanghin',
+    telephone: '+22625352200',
+    horaires: '07h30 - 22h',
+    tags: {'de_garde': false},
+    categorie: CategoryModel(id: 1, nom: 'Pharmacie', slug: 'pharmacie', icone: 'local_pharmacy'),
+  ),
+  // --- Hôpitaux, Cliniques & CSPS ---
+  PlaceModel(
+    id: 67,
+    nom: 'CHU de Bogodogo',
+    description: 'Nouveau Centre Hospitalier Universitaire et Urgences',
+    categorieId: 4,
+    latitude: 12.3482,
+    longitude: -1.4721,
+    ville: 'Ouagadougou',
+    quartier: 'Bogodogo',
+    telephone: '+22625370000',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 4, nom: 'Hôpital / Urgences', slug: 'hopital-sante', icone: 'local_hospital'),
+  ),
+  PlaceModel(
+    id: 68,
+    nom: 'CHU de Tengandogo (Hôpital Blaise Compaoré)',
+    description: 'Hôpital moderne de référence internationale',
+    categorieId: 4,
+    latitude: 12.2880,
+    longitude: -1.5280,
+    ville: 'Ouagadougou',
+    quartier: 'Tengandogo',
+    telephone: '+22625378888',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 4, nom: 'Hôpital / Urgences', slug: 'hopital-sante', icone: 'local_hospital'),
+  ),
+  PlaceModel(
+    id: 69,
+    nom: 'CMA de Pissy',
+    description: 'Centre Médical avec antenne chirurgicale et maternité',
+    categorieId: 4,
+    latitude: 12.3460,
+    longitude: -1.5540,
+    ville: 'Ouagadougou',
+    quartier: 'Pissy',
+    telephone: '+22625431100',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 4, nom: 'Hôpital / Urgences', slug: 'hopital-sante', icone: 'local_hospital'),
+  ),
+  PlaceModel(
+    id: 70,
+    nom: 'CSPS de Gounghin',
+    description: 'Centre de Santé et de Promotion Sociale',
+    categorieId: 4,
+    latitude: 12.3560,
+    longitude: -1.5430,
+    ville: 'Ouagadougou',
+    quartier: 'Gounghin',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 4, nom: 'Hôpital / Urgences', slug: 'hopital-sante', icone: 'local_hospital'),
+  ),
+  PlaceModel(
+    id: 71,
+    nom: 'CSPS de Wemtenga',
+    description: 'Centre de Santé et de Promotion Sociale de Wemtenga',
+    categorieId: 4,
+    latitude: 12.3520,
+    longitude: -1.4950,
+    ville: 'Ouagadougou',
+    quartier: 'Wemtenga',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 4, nom: 'Hôpital / Urgences', slug: 'hopital-sante', icone: 'local_hospital'),
+  ),
+  PlaceModel(
+    id: 72,
+    nom: 'Clinique Notre-Dame de la Paix',
+    description: 'Clinique médico-chirurgicale privée',
+    categorieId: 4,
+    latitude: 12.3690,
+    longitude: -1.5160,
+    ville: 'Ouagadougou',
+    quartier: 'Koulouba',
+    telephone: '+22625312345',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 4, nom: 'Hôpital / Urgences', slug: 'hopital-sante', icone: 'local_hospital'),
+  ),
+  // --- Stations-service supplémentaires ---
+  PlaceModel(
+    id: 73,
+    nom: 'Total Gounghin',
+    description: 'Station-service, lubrifiants et gonflage deux-roues 24h/24',
+    categorieId: 2,
+    latitude: 12.3590,
+    longitude: -1.5440,
+    ville: 'Ouagadougou',
+    quartier: 'Gounghin',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 2, nom: 'Station-service', slug: 'station-service', icone: 'local_gas_station'),
+  ),
+  PlaceModel(
+    id: 74,
+    nom: 'Total Ouaga 2000',
+    description: 'Station-service moderne et boutique Bonjour',
+    categorieId: 2,
+    latitude: 12.3240,
+    longitude: -1.5090,
+    ville: 'Ouagadougou',
+    quartier: 'Ouaga 2000',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 2, nom: 'Station-service', slug: 'station-service', icone: 'local_gas_station'),
+  ),
+  PlaceModel(
+    id: 75,
+    nom: 'Petrofa Zogona',
+    description: 'Carburant et gonflage pneus deux-roues',
+    categorieId: 2,
+    latitude: 12.3740,
+    longitude: -1.4990,
+    ville: 'Ouagadougou',
+    quartier: 'Zogona',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 2, nom: 'Station-service', slug: 'station-service', icone: 'local_gas_station'),
+  ),
+  PlaceModel(
+    id: 76,
+    nom: 'Oryx Somgandé',
+    description: 'Station-service Oryx avec boutique de nuit',
+    categorieId: 2,
+    latitude: 12.3870,
+    longitude: -1.5040,
+    ville: 'Ouagadougou',
+    quartier: 'Somgandé',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 2, nom: 'Station-service', slug: 'station-service', icone: 'local_gas_station'),
+  ),
+  // --- Maquis & Restaurants de référence ---
+  PlaceModel(
+    id: 77,
+    nom: 'Maquis Le Verdoyant',
+    description: 'Restaurant terrasse réputé près de la Place de la Nation',
+    categorieId: 3,
+    latitude: 12.3659,
+    longitude: -1.5245,
+    ville: 'Ouagadougou',
+    quartier: 'Koulouba',
+    horaires: '11h - 00h',
+    categorie: CategoryModel(id: 3, nom: 'Maquis / Resto', slug: 'maquis-restaurant', icone: 'restaurant'),
+  ),
+  PlaceModel(
+    id: 78,
+    nom: 'Maquis Les Étoiles de Ouaga 2000',
+    description: 'Poulet bicyclette braisé et boissons fraîches en terrasse',
+    categorieId: 3,
+    latitude: 12.3250,
+    longitude: -1.5085,
+    ville: 'Ouagadougou',
+    quartier: 'Ouaga 2000',
+    horaires: '12h - 02h',
+    categorie: CategoryModel(id: 3, nom: 'Maquis / Resto', slug: 'maquis-restaurant', icone: 'restaurant'),
+  ),
+  PlaceModel(
+    id: 79,
+    nom: 'Restaurant Gondwana',
+    description: 'Spécialités africaines et grillades au feu de bois',
+    categorieId: 3,
+    latitude: 12.3640,
+    longitude: -1.5215,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    horaires: '11h - 23h',
+    categorie: CategoryModel(id: 3, nom: 'Maquis / Resto', slug: 'maquis-restaurant', icone: 'restaurant'),
+  ),
+  PlaceModel(
+    id: 80,
+    nom: 'Maquis Le Poulet Chaud Pissy',
+    description: 'Poulet braisé local et rafraîchissements',
+    categorieId: 3,
+    latitude: 12.3475,
+    longitude: -1.5560,
+    ville: 'Ouagadougou',
+    quartier: 'Pissy',
+    horaires: '12h - 01h',
+    categorie: CategoryModel(id: 3, nom: 'Maquis / Resto', slug: 'maquis-restaurant', icone: 'restaurant'),
+  ),
+  // --- Banques, GAB & Distributeurs ---
+  PlaceModel(
+    id: 81,
+    nom: 'Coris Bank Siège',
+    description: 'Siège social Coris Bank International et guichet GAB 24h/24',
+    categorieId: 6,
+    latitude: 12.3670,
+    longitude: -1.5240,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    horaires: '08h - 16h (GAB 24h/24)',
+    categorie: CategoryModel(id: 6, nom: 'Banque & DAB', slug: 'banque-distributeur', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 82,
+    nom: 'BOA Burkina Siège',
+    description: 'Siège Bank of Africa et distributeurs automatiques GAB',
+    categorieId: 6,
+    latitude: 12.3650,
+    longitude: -1.5180,
+    ville: 'Ouagadougou',
+    quartier: 'Kwame N\'Krumah',
+    horaires: '08h - 16h (GAB 24h/24)',
+    categorie: CategoryModel(id: 6, nom: 'Banque & DAB', slug: 'banque-distributeur', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 83,
+    nom: 'Ecobank Burkina Siège',
+    description: 'Siège Ecobank et espace bancaire libre-service GAB',
+    categorieId: 6,
+    latitude: 12.3685,
+    longitude: -1.5210,
+    ville: 'Ouagadougou',
+    quartier: 'Centre-Ville',
+    horaires: '08h - 16h (GAB 24h/24)',
+    categorie: CategoryModel(id: 6, nom: 'Banque & DAB', slug: 'banque-distributeur', icone: 'account_balance'),
+  ),
+  PlaceModel(
+    id: 84,
+    nom: 'GAB Coris Bank 1200 Logements',
+    description: 'Distributeur automatique de billets accessible 24h/24',
+    categorieId: 6,
+    latitude: 12.3680,
+    longitude: -1.4980,
+    ville: 'Ouagadougou',
+    quartier: '1200 Logements',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 6, nom: 'Banque & DAB', slug: 'banque-distributeur', icone: 'credit_card'),
+  ),
+  PlaceModel(
+    id: 85,
+    nom: 'GAB Ecobank Tampouy',
+    description: 'Distributeur automatique GAB et agence de Tampouy',
+    categorieId: 6,
+    latitude: 12.3940,
+    longitude: -1.5490,
+    ville: 'Ouagadougou',
+    quartier: 'Tampouy',
+    horaires: '24h/24',
+    categorie: CategoryModel(id: 6, nom: 'Banque & DAB', slug: 'banque-distributeur', icone: 'credit_card'),
+  ),
 ];
+
+/// Filtre spécifique pharmacies de garde (activable via UI, faux par défaut pour afficher toutes les pharmacies)
+class OnlyDeGardeNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void toggle() => state = !state;
+  void setVal(bool value) => state = value;
+}
+
+final onlyDeGardeFilterProvider = NotifierProvider<OnlyDeGardeNotifier, bool>(
+  OnlyDeGardeNotifier.new,
+);
 
 /// Fournisseur des lieux à proximité (autour de l'utilisateur ou du centre sélectionné)
 final nearbyPlacesProvider = FutureProvider<List<PlaceModel>>((ref) async {
   final repository = ref.watch(placesRepositoryProvider);
   final location = ref.watch(currentLocationProvider);
   final selectedCats = ref.watch(selectedCategoriesProvider);
+  final onlyDeGarde = ref.watch(onlyDeGardeFilterProvider);
 
   bool matchesCategory(PlaceModel place) {
-    if (selectedCats.isEmpty) return true;
     final slug = (place.categorie?.slug ?? '').toLowerCase();
     final nom = place.nom.toLowerCase();
+    final isPharmacie = slug.contains('pharmacie') || nom.contains('pharmacie');
+
+    if (onlyDeGarde && isPharmacie && !place.isDeGarde) {
+      return false;
+    }
+
+    if (selectedCats.isEmpty) return true;
 
     for (final cat in selectedCats) {
       final c = cat.toLowerCase();
-      if (slug == c || slug.contains(c) || nom.contains(c)) {
+      if (slug == c || slug.contains(c) || nom.contains(c)) return true;
+      if (c == 'pharmacie' && isPharmacie) return true;
+      if ((c == 'station' || c == 'station-service') &&
+          (slug.contains('station') || nom.contains('station') || nom.contains('total') || nom.contains('shell') || nom.contains('oryx') || nom.contains('petrofa'))) {
+        return true;
+      }
+      if ((c == 'hopital' || c == 'hopital-sante') &&
+          (slug.contains('hopital') || nom.contains('hopital') || nom.contains('chu') || nom.contains('cma') || nom.contains('csps') || nom.contains('clinique'))) {
+        return true;
+      }
+      if ((c == 'maquis' || c == 'maquis-restaurant') &&
+          (slug.contains('maquis') || slug.contains('resto') || nom.contains('maquis') || nom.contains('restaurant'))) {
+        return true;
+      }
+      if ((c == 'administration' || c == 'admin') &&
+          (slug.contains('admin') || slug.contains('patrimoine') || nom.contains('mairie') || nom.contains('commissariat') || nom.contains('ministere') || nom.contains('primature') || nom.contains('palais') || nom.contains('monument'))) {
+        return true;
+      }
+      if ((c == 'ecole' || c == 'ecole-universite') &&
+          (slug.contains('ecole') || nom.contains('universite') || nom.contains('lycee') || nom.contains('college') || nom.contains('enam') || nom.contains('isig') || nom.contains('2ie'))) {
+        return true;
+      }
+      if ((c == 'marche' || c == 'marche-commerce') &&
+          (slug.contains('marche') || slug.contains('commerce') || nom.contains('marche') || nom.contains('alimentation') || nom.contains('marina') || nom.contains('supermarche') || nom.contains('surface') || nom.contains('boutique'))) {
+        return true;
+      }
+      if ((c == 'banque' || c == 'banque-distributeur') &&
+          (slug.contains('banque') || nom.contains('banque') || nom.contains('coris') || nom.contains('boa') || nom.contains('ecobank') || nom.contains('gab'))) {
         return true;
       }
     }
@@ -762,13 +1544,11 @@ final nearbyPlacesProvider = FutureProvider<List<PlaceModel>>((ref) async {
       limit: 60,
     );
 
-    // Fusionner et filtrer rigoureusement selon les catégories sélectionnées
+    // Initialiser avec tous les repères locaux et fusionner avec le serveur
     final Map<String, PlaceModel> placesMap = {};
-    if (AppConfig.testMode) {
-      for (final p in defaultOuagaIconicPlaces) {
-        if (matchesCategory(p)) {
-          placesMap[p.nom.toLowerCase().trim()] = p;
-        }
+    for (final p in defaultOuagaIconicPlaces) {
+      if (matchesCategory(p)) {
+        placesMap[p.nom.toLowerCase().trim()] = p;
       }
     }
     for (final p in backendPlaces) {
@@ -786,12 +1566,9 @@ final nearbyPlacesProvider = FutureProvider<List<PlaceModel>>((ref) async {
     return result;
   } catch (e) {
     AppLogger.w('Échec chargement lieux backend: $e');
-    if (AppConfig.testMode) {
-      final localFiltered = defaultOuagaIconicPlaces.where(matchesCategory).toList();
-      localFiltered.sort((a, b) => a.distanceTo(location.lat, location.lon).compareTo(b.distanceTo(location.lat, location.lon)));
-      return localFiltered;
-    }
-    return [];
+    final localFiltered = defaultOuagaIconicPlaces.where(matchesCategory).toList();
+    localFiltered.sort((a, b) => a.distanceTo(location.lat, location.lon).compareTo(b.distanceTo(location.lat, location.lon)));
+    return localFiltered;
   }
 });
 

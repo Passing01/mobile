@@ -242,8 +242,10 @@ class PlaceModel extends Equatable {
 
   /// Conversion en Feature GeoJSON pour intégration directe dans la couche cartographique
   Map<String, dynamic> toGeoJsonFeature() {
+    final catSlug = categorie?.slug ?? 'divers';
     return {
       'type': 'Feature',
+      'id': uuid ?? id.toString(),
       'geometry': {
         'type': 'Point',
         'coordinates': [longitude, latitude],
@@ -251,14 +253,30 @@ class PlaceModel extends Equatable {
       'properties': {
         'id': uuid ?? id.toString(),
         'name': nom,
-        'category': categorie?.slug ?? 'divers',
-        'color': MapTheme.colorForCategory(categorie?.slug),
-        'strokeColor': MapTheme.strokeColorForCategory(categorie?.slug),
+        'nom': nom,
+        'category': catSlug,
+        'category_slug': catSlug,
+        'color': MapTheme.colorForCategory(catSlug),
+        'strokeColor': MapTheme.strokeColorForCategory(catSlug),
+        'icon': _pinIconFor(catSlug),
         'size': categorie?.markerSize ?? importance,
         'importance': importance,
         'tags': tags,
       },
     };
+  }
+
+  static String _pinIconFor(String slug) {
+    final s = slug.toLowerCase().trim();
+    if (s.contains('pharmacie')) return 'pin-pharmacie';
+    if (s.contains('station')) return 'pin-station-service';
+    if (s.contains('maquis') || s.contains('resto') || s.contains('restaurant')) return 'pin-maquis-restaurant';
+    if (s.contains('hopital') || s.contains('sante') || s.contains('clinique') || s.contains('csps')) return 'pin-hopital-sante';
+    if (s.contains('banque') || s.contains('distributeur') || s.contains('atm')) return 'pin-banque-distributeur';
+    if (s.contains('administration') || s.contains('mairie') || s.contains('police')) return 'pin-administration';
+    if (s.contains('ecole') || s.contains('universite') || s.contains('lycee') || s.contains('college')) return 'pin-ecole-universite';
+    if (s.contains('marche') || s.contains('commerce') || s.contains('boutique') || s.contains('alimentation')) return 'pin-marche-commerce';
+    return 'pin-default';
   }
 
   PlaceModel copyWith({

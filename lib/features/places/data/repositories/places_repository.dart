@@ -270,9 +270,33 @@ class PlacesRepository {
             AppLogger.w('Impossible de mettre en cache les lieux: $e');
           });
         }
-        final map = <String, dynamic>{'is_offline': false};
-        data.forEach((k, v) => map[k.toString()] = v);
-        return map;
+
+        // Fusionner systématiquement avec le catalogue exhaustif des repères de Ouagadougou
+        // afin que la carte ne soit jamais vierge en dehors des points transitoires du serveur
+        final localFeatures = _buildLocalFallbackFeatures(categories ?? const []);
+        final mergedMap = <String, Map<String, dynamic>>{};
+        for (final lf in localFeatures) {
+          final name = (lf['properties']?['name'] ?? lf['id'] ?? '').toString();
+          if (name.isNotEmpty) mergedMap[name] = lf;
+        }
+        for (final bf in features) {
+          if (bf is Map) {
+            final bMap = Map<String, dynamic>.from(bf);
+            final name = (bMap['properties']?['name'] ??
+                    bMap['properties']?['nom'] ??
+                    bMap['id'] ??
+                    '')
+                .toString();
+            if (name.isNotEmpty) mergedMap[name] = bMap;
+          }
+        }
+        final mergedList = mergedMap.values.toList();
+        return {
+          'type': 'FeatureCollection',
+          'features': mergedList,
+          'meta': {'count': mergedList.length, 'truncated': false},
+          'is_offline': false,
+        };
       }
 
       // Si l'API retourne 0 points dans cette boîte, tenter de charger les points hors-ligne enregistrés
@@ -311,11 +335,19 @@ class PlacesRepository {
           catSet.contains(slug) ||
           (catSet.contains('pharmacie') && (slug.contains('pharmacie') || nom.contains('pharmacie'))) ||
           ((catSet.contains('station-service') || catSet.contains('station')) &&
-              (slug.contains('station') || nom.contains('station') || nom.contains('total') || nom.contains('shell'))) ||
+              (slug.contains('station') || nom.contains('station') || nom.contains('total') || nom.contains('shell') || nom.contains('oryx') || nom.contains('petrofa'))) ||
           ((catSet.contains('hopital-sante') || catSet.contains('hopital')) &&
-              (slug.contains('hopital') || nom.contains('chuy') || nom.contains('yalgado') || nom.contains('cma') || nom.contains('clinique'))) ||
+              (slug.contains('hopital') || nom.contains('chuy') || nom.contains('yalgado') || nom.contains('cma') || nom.contains('clinique') || nom.contains('csps'))) ||
           ((catSet.contains('maquis-restaurant') || catSet.contains('maquis')) &&
-              (slug.contains('maquis') || slug.contains('restaurant') || nom.contains('maquis')));
+              (slug.contains('maquis') || slug.contains('restaurant') || nom.contains('maquis') || nom.contains('resto'))) ||
+          ((catSet.contains('administration') || catSet.contains('admin')) &&
+              (slug.contains('admin') || slug.contains('patrimoine') || nom.contains('mairie') || nom.contains('commissariat') || nom.contains('ministere') || nom.contains('primature') || nom.contains('palais') || nom.contains('monument'))) ||
+          ((catSet.contains('ecole-universite') || catSet.contains('ecole')) &&
+              (slug.contains('ecole') || nom.contains('universite') || nom.contains('lycee') || nom.contains('college') || nom.contains('enam') || nom.contains('isig'))) ||
+          ((catSet.contains('marche-commerce') || catSet.contains('marche') || catSet.contains('commerce')) &&
+              (slug.contains('marche') || slug.contains('commerce') || nom.contains('marche') || nom.contains('alimentation') || nom.contains('marina') || nom.contains('supermarche') || nom.contains('surface') || nom.contains('boutique'))) ||
+          ((catSet.contains('banque-distributeur') || catSet.contains('banque')) &&
+              (slug.contains('banque') || nom.contains('banque') || nom.contains('coris') || nom.contains('boa') || nom.contains('ecobank') || nom.contains('gab')));
       if (matchesCat) {
         features.add(p.toGeoJsonFeature());
       }

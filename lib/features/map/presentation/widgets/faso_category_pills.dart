@@ -11,6 +11,8 @@ class FasoCategoryPills extends ConsumerWidget {
     final categoriesAsync = ref.watch(categoriesProvider);
     final selectedCategories = ref.watch(selectedCategoriesProvider);
     final count = ref.watch(placesCountProvider);
+    final onlyDeGarde = ref.watch(onlyDeGardeFilterProvider);
+    final isPharmacieActive = selectedCategories.contains('pharmacie');
 
     return SizedBox(
       height: 44,
@@ -19,11 +21,12 @@ class FasoCategoryPills extends ConsumerWidget {
           // Filtrer selon isFilter
           final filterableCats = categories.where((c) => c.isFilter).toList();
           final hasFilters = selectedCategories.isNotEmpty;
+          final totalCount = filterableCats.length + 1 + (isPharmacieActive ? 1 : 0);
 
           return ListView.separated(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             scrollDirection: Axis.horizontal,
-            itemCount: filterableCats.length + 1,
+            itemCount: totalCount,
             separatorBuilder: (context, index) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               if (index == 0) {
@@ -76,6 +79,52 @@ class FasoCategoryPills extends ConsumerWidget {
                           const SizedBox(width: 4),
                           const Icon(Icons.close_rounded, size: 14, color: Colors.white70),
                         ],
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              if (isPharmacieActive && index == filterableCats.length + 1) {
+                return GestureDetector(
+                  onTap: () {
+                    ref.read(onlyDeGardeFilterProvider.notifier).toggle();
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: onlyDeGarde ? const Color(0xFF00A651) : Colors.white.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: onlyDeGarde ? Colors.white : const Color(0xFF00A651),
+                        width: onlyDeGarde ? 2 : 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          onlyDeGarde ? Icons.check_circle_rounded : Icons.shield_outlined,
+                          size: 16,
+                          color: onlyDeGarde ? Colors.white : const Color(0xFF00A651),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          onlyDeGarde ? 'De garde uniquement' : 'De garde ? (Toutes affichées)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: onlyDeGarde ? Colors.white : const Color(0xFF00A651),
+                          ),
+                        ),
                       ],
                     ),
                   ),
