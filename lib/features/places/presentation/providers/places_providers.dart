@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:qvgestion_mobile/core/config/app_config.dart';
 import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
 import 'package:qvgestion_mobile/core/services/location_service.dart';
@@ -1614,11 +1615,13 @@ final nearbyPlacesProvider = FutureProvider<List<PlaceModel>>((ref) async {
       limit: 60,
     );
 
-    // Initialiser avec tous les repères locaux et fusionner avec le serveur
+    // En mode test uniquement, fusionner avec les repères simulés
     final Map<String, PlaceModel> placesMap = {};
-    for (final p in defaultOuagaIconicPlaces) {
-      if (matchesCategory(p)) {
-        placesMap[p.nom.toLowerCase().trim()] = p;
+    if (AppConfig.testMode) {
+      for (final p in defaultOuagaIconicPlaces) {
+        if (matchesCategory(p)) {
+          placesMap[p.nom.toLowerCase().trim()] = p;
+        }
       }
     }
     for (final p in backendPlaces) {
@@ -1636,9 +1639,12 @@ final nearbyPlacesProvider = FutureProvider<List<PlaceModel>>((ref) async {
     return result;
   } catch (e) {
     AppLogger.w('Échec chargement lieux backend: $e');
-    final localFiltered = defaultOuagaIconicPlaces.where(matchesCategory).toList();
-    localFiltered.sort((a, b) => a.distanceTo(location.lat, location.lon).compareTo(b.distanceTo(location.lat, location.lon)));
-    return localFiltered;
+    if (AppConfig.testMode) {
+      final localFiltered = defaultOuagaIconicPlaces.where(matchesCategory).toList();
+      localFiltered.sort((a, b) => a.distanceTo(location.lat, location.lon).compareTo(b.distanceTo(location.lat, location.lon)));
+      return localFiltered;
+    }
+    rethrow;
   }
 });
 

@@ -195,6 +195,8 @@ class RouteModel extends Equatable {
   final List<ManeuverModel> maneuvers;
   final String engine;
   final int? startSnapM;
+  final List<List<double>>? walkingSegment;
+  final double? walkingDistanceMeters;
 
   const RouteModel({
     required this.mode,
@@ -207,6 +209,8 @@ class RouteModel extends Equatable {
     required this.maneuvers,
     required this.engine,
     this.startSnapM,
+    this.walkingSegment,
+    this.walkingDistanceMeters,
   });
 
   factory RouteModel.fromJson(Map<String, dynamic> json) {
@@ -286,6 +290,24 @@ class RouteModel extends Equatable {
                 ? '${(dur / 60).round()} min'
                 : '${dur ~/ 3600} h ${(dur % 3600 ~/ 60)} min');
 
+    final rawWalk = json['walking_segment'];
+    List<List<double>>? parsedWalk;
+    if (rawWalk is Map && rawWalk['coordinates'] is List) {
+      final wcoords = rawWalk['coordinates'] as List;
+      final pts = <List<double>>[];
+      for (final p in wcoords) {
+        if (p is List && p.length >= 2) {
+          final c0 = (p[0] as num).toDouble();
+          final c1 = (p[1] as num).toDouble();
+          if (c0.isFinite && c1.isFinite) {
+            pts.add([c0, c1]);
+          }
+        }
+      }
+      if (pts.isNotEmpty) parsedWalk = pts;
+    }
+    final walkingDist = (json['walking_distance_m'] as num?)?.toDouble();
+
     return RouteModel(
       mode: (json['mode'] as String?) ?? 'moto',
       distanceMeters: dist,
@@ -299,6 +321,8 @@ class RouteModel extends Equatable {
       maneuvers: parsedManeuvers,
       engine: (json['engine'] as String?) ?? 'valhalla',
       startSnapM: (json['start_snap_m'] as num?)?.toInt(),
+      walkingSegment: parsedWalk,
+      walkingDistanceMeters: walkingDist,
     );
   }
 
@@ -313,6 +337,8 @@ class RouteModel extends Equatable {
     List<ManeuverModel>? maneuvers,
     String? engine,
     int? startSnapM,
+    List<List<double>>? walkingSegment,
+    double? walkingDistanceMeters,
   }) {
     return RouteModel(
       mode: mode ?? this.mode,
@@ -325,6 +351,8 @@ class RouteModel extends Equatable {
       maneuvers: maneuvers ?? this.maneuvers,
       engine: engine ?? this.engine,
       startSnapM: startSnapM ?? this.startSnapM,
+      walkingSegment: walkingSegment ?? this.walkingSegment,
+      walkingDistanceMeters: walkingDistanceMeters ?? this.walkingDistanceMeters,
     );
   }
 
@@ -363,5 +391,7 @@ class RouteModel extends Equatable {
         maneuvers,
         engine,
         startSnapM,
+        walkingSegment,
+        walkingDistanceMeters,
       ];
 }

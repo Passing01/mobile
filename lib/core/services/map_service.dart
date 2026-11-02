@@ -246,6 +246,7 @@ class MapLibreMapService implements MapService {
     String layerId,
     LineLayerProperties properties, {
     String? belowLayerId,
+    dynamic filter,
     bool enableInteraction = false,
   }) async {
     if (!existingLayers.contains(layerId)) {
@@ -255,6 +256,7 @@ class MapLibreMapService implements MapService {
           layerId,
           properties,
           belowLayerId: belowLayerId,
+          filter: filter,
           enableInteraction: enableInteraction,
         );
         existingLayers.add(layerId);
@@ -491,6 +493,7 @@ class MapLibreMapService implements MapService {
           lineJoin: 'round',
           lineCap: 'round',
         ),
+        filter: ['!=', ['get', 'is_walk'], true],
         belowLayerId: placesPointsLayerId,
         enableInteraction: false,
       );
@@ -507,6 +510,25 @@ class MapLibreMapService implements MapService {
           lineJoin: 'round',
           lineCap: 'round',
         ),
+        filter: ['!=', ['get', 'is_walk'], true],
+        belowLayerId: placesPointsLayerId,
+        enableInteraction: false,
+      );
+
+      // 2.3 Couche de raccordement piéton (pointillé vert pour le dernier tronçon d'accès)
+      await _safeAddLineLayer(
+        c,
+        existingLayers,
+        routeSourceId,
+        'route-walking-dashed-layer',
+        const LineLayerProperties(
+          lineColor: '#10B981',
+          lineWidth: 4.5,
+          lineDasharray: [2.0, 2.0],
+          lineJoin: 'round',
+          lineCap: 'round',
+        ),
+        filter: ['==', ['get', 'is_walk'], true],
         belowLayerId: placesPointsLayerId,
         enableInteraction: false,
       );
@@ -1161,15 +1183,43 @@ class MapLibreMapService implements MapService {
       }
     }
 
+    final features = <Map<String, dynamic>>[
+      {
+        'type': 'Feature',
+        'geometry': {'type': 'LineString', 'coordinates': coords},
+        'properties': {
+          'mode': route.mode,
+          'distance': route.distanceMeters,
+          'is_walk': false,
+        },
+      },
+    ];
+
+    if (route.walkingSegment != null && route.walkingSegment!.length >= 2) {
+      final walkCoords = <List<double>>[];
+      for (final pt in route.walkingSegment!) {
+        if (pt.length >= 2 && pt[0].isFinite && pt[1].isFinite) {
+          final lon = pt[0] < 5.0 ? pt[0].toDouble() : pt[1].toDouble();
+          final lat = pt[1] > 8.0 ? pt[1].toDouble() : pt[0].toDouble();
+          walkCoords.add([lon, lat]);
+        }
+      }
+      if (walkCoords.length >= 2) {
+        features.add({
+          'type': 'Feature',
+          'geometry': {'type': 'LineString', 'coordinates': walkCoords},
+          'properties': {
+            'mode': 'walk',
+            'distance': route.walkingDistanceMeters ?? 0.0,
+            'is_walk': true,
+          },
+        });
+      }
+    }
+
     return {
       'type': 'FeatureCollection',
-      'features': [
-        {
-          'type': 'Feature',
-          'geometry': {'type': 'LineString', 'coordinates': coords},
-          'properties': {'mode': route.mode, 'distance': route.distanceMeters},
-        },
-      ],
+      'features': features,
     };
   }
 

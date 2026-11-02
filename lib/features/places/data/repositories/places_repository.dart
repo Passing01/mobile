@@ -167,7 +167,9 @@ class PlacesRepository {
     }
 
     if (results.isEmpty) {
-      return _buildLocalFallbackFeatures(categories ?? const []);
+      return AppConfig.testMode
+          ? _buildLocalFallbackFeatures(categories ?? const [])
+          : const [];
     }
 
     // Filtrage par BoundingBox si présent
@@ -271,9 +273,22 @@ class PlacesRepository {
           });
         }
 
-        // Fusionner systématiquement avec le catalogue exhaustif des repères de Ouagadougou
-        // afin que la carte ne soit jamais vierge en dehors des points transitoires du serveur
-        final localFeatures = _buildLocalFallbackFeatures(categories ?? const []);
+        // En mode test uniquement, fusionner avec les repères simulés
+        final localFeatures = AppConfig.testMode
+            ? _buildLocalFallbackFeatures(categories ?? const [])
+            : const <Map<String, dynamic>>[];
+        if (localFeatures.isEmpty) {
+          final cleanList = features
+              .whereType<Map>()
+              .map((f) => Map<String, dynamic>.from(f))
+              .toList();
+          return {
+            'type': 'FeatureCollection',
+            'features': cleanList,
+            'meta': {'count': cleanList.length, 'truncated': false},
+            'is_offline': false,
+          };
+        }
         final mergedMap = <String, Map<String, dynamic>>{};
         for (final lf in localFeatures) {
           final name = (lf['properties']?['name'] ?? lf['id'] ?? '').toString();
@@ -325,6 +340,9 @@ class PlacesRepository {
   }
 
   List<Map<String, dynamic>> _buildLocalFallbackFeatures(List<String> categories) {
+    if (!AppConfig.testMode) {
+      return const [];
+    }
     final features = <Map<String, dynamic>>[];
     final catSet = categories.map((c) => c.toLowerCase()).toSet();
 

@@ -2341,6 +2341,26 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (activeRoute.walkingDistanceMeters != null &&
+                          activeRoute.walkingDistanceMeters! > 15) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFF10B981), width: 0.8),
+                          ),
+                          child: Text(
+                            '+ ${activeRoute.walkingDistanceMeters!.round()} m à pied',
+                            style: const TextStyle(
+                              color: Color(0xFF34D399),
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ],
                 ),

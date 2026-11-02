@@ -336,6 +336,7 @@ class VoiceGuide {
     String text, {
     String? audioSource,
     String language = 'fr',
+    String? frenchFallbackText,
   }) async {
     AppLogger.i('[VOIX] $text');
     banner.value = text; // Le texte s'affiche toujours
@@ -365,12 +366,18 @@ class VoiceGuide {
       }
     }
 
-    // Synthèse vocale TTS (en français ou repli phonétique pour Mooré et Dioula)
+    // Synthèse vocale TTS :
+    // RÈGLE ÉTAPE 10 : Si un audio mooré ou dioula manque, le repli sur la voix de synthèse française
+    // lirait du texte mooré/dioula avec une prononciation française incompréhensible.
+    // En cas de repli, énoncer la consigne équivalente EN FRANÇAIS tout en gardant l'affichage dans la langue sélectionnée !
     if (!audioPlayed && _ok) {
       try {
         await _player?.stop();
         await _tts.stop();
-        await _tts.speak(text);
+        final textToSpeak = (language != 'fr' && language != 'fr-FR')
+            ? (frenchFallbackText != null && frenchFallbackText.isNotEmpty ? frenchFallbackText : text)
+            : text;
+        await _tts.speak(textToSpeak);
       } catch (e) {
         AppLogger.w('[VOIX] Erreur synthèse vocale: $e');
       }
@@ -380,27 +387,32 @@ class VoiceGuide {
   /// Énonce la manœuvre avec prise en compte des repères familiers
   Future<void> sayStep(dynamic step, {String language = 'fr'}) async {
     String text = '';
+    String frenchFallbackText = '';
     String? audioUrl;
     String? landmarkName;
 
     if (step is GuideStep) {
-      text = step.spoken(dist: 50, language: language);
-      audioUrl = step.localAudioFile;
+      text = step.spoken(dist: 50.0, language: language);
+      frenchFallbackText = step.spoken(dist: 50.0, language: 'fr');
+      audioUrl = step.audioFor(dist: 50.0, language: language) ?? step.localAudioFile;
       landmarkName = step.anchorName;
     } else if (step is Map<String, dynamic>) {
       text = (step['localized_instruction'] as String?) ??
           (step['instruction'] as String?) ??
           (step['maneuver'] is Map ? step['maneuver']['instruction'] as String? : null) ??
           '';
+      frenchFallbackText = (step['instruction'] as String?) ?? text;
       audioUrl = step['audio_url'] as String?;
       landmarkName = step['landmark_name'] as String?;
     } else {
       try {
         text = (step.localizedInstruction ?? step.originalInstruction ?? '').toString();
+        frenchFallbackText = (step.originalInstruction ?? step.instruction ?? text).toString();
         audioUrl = step.audioUrl as String?;
         landmarkName = step.landmarkName as String?;
       } catch (_) {
         text = step.toString();
+        frenchFallbackText = text;
       }
     }
 
@@ -413,9 +425,15 @@ class VoiceGuide {
       } else {
         text = 'Après $landmarkName, $text';
       }
+      frenchFallbackText = 'Après $landmarkName, $frenchFallbackText';
     }
 
-    await say(text, audioSource: audioUrl, language: language);
+    await say(
+      text,
+      audioSource: audioUrl,
+      language: language,
+      frenchFallbackText: frenchFallbackText,
+    );
   }
 
   Future<void> stop() async {
