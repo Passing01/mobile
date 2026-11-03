@@ -18,6 +18,9 @@ analyzer:
     - windows/**
     - macos/**
     - linux/**
+    - donnee/**
+    - .dart_tool/**
+    - docs/**
 
 linter:
   # The lint rules applied to this project can be customized in the

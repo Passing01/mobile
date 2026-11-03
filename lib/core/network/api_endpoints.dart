@@ -66,9 +66,16 @@ class ApiEndpoints {
   static const String weatherCurrent = '/weather/current';
   static const String weatherForecast = '/weather/forecast';
 
-  // --- Back-Office & Administration ---
+  // --- Back-Office & Administration (GrabMaps & API B2B) ---
   static const String adminDashboard = '/admin/dashboard';
   static const String adminPendingPlaces = '/admin/pending-places';
   static String adminModeratePlace(int placeId) => '/admin/places/$placeId/moderate';
   static const String adminRoadFeatures = '/guidance/road-features';
+  static const String adminApiKeys = '/admin/api-keys';
+  static String adminApiKeyToggle(int id) => '/admin/api-keys/$id/toggle';
+  static String adminApiKeyDelete(int id) => '/admin/api-keys/$id';
+  static const String adminTrafficSignal = '/admin/road-features/traffic-signal';
+  static const String adminRoadMaintenance = '/admin/road-maintenance';
+  static const String adminRoadTrace = '/admin/roads/trace';
+  static const String matrix = '/matrix';
 }

@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
+import 'package:qvgestion_mobile/features/admin/data/models/api_key_model.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/providers/admin_providers.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/add_traffic_signal_dialog.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/broadcast_geo_alert_modal.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/create_api_key_dialog.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/declare_maintenance_dialog.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/trace_road_dialog.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 import 'package:qvgestion_mobile/features/reports/presentation/providers/reports_providers.dart';
 
-/// Onglet 5 officiel : Administration, Modération des POI & Supervision FASO NAV
+/// Console d'Administration, Éditeur Carto Pro (GrabMaps) & API B2B FASO NAV
 class AdminScreen extends ConsumerStatefulWidget {
   const AdminScreen({super.key});
 
@@ -22,7 +28,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -37,6 +43,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
     ref.invalidate(activeReportsProvider);
     ref.invalidate(categoriesProvider);
     ref.invalidate(adminRoadFeaturesProvider);
+    ref.invalidate(adminApiKeysProvider);
     AppSnackbar.showInfo(context, message: 'Données actualisées');
   }
 
@@ -84,6 +91,8 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
           tabs: const [
             Tab(icon: Icon(Icons.dashboard_rounded, size: 18), text: 'Vue Globale'),
             Tab(icon: Icon(Icons.verified_user_rounded, size: 18), text: 'Modération'),
+            Tab(icon: Icon(Icons.edit_location_alt_rounded, size: 18), text: 'Éditeur Carto'),
+            Tab(icon: Icon(Icons.vpn_key_rounded, size: 18), text: 'API B2B'),
             Tab(icon: Icon(Icons.category_rounded, size: 18), text: 'Catégories'),
             Tab(icon: Icon(Icons.traffic_rounded, size: 18), text: 'Ancres Routières'),
           ],
@@ -94,6 +103,8 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
         children: [
           _buildDashboardTab(),
           _buildModerationTab(),
+          _buildMapEditorTab(),
+          _buildApiKeysTab(),
           _buildCategoriesTab(),
           _buildRoadFeaturesTab(),
         ],
@@ -101,7 +112,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
     );
   }
 
+  // ====================================================
   // ---- Onglet 1 : Vue Globale & Statistiques (KPIs) ----
+  // ====================================================
   Widget _buildDashboardTab() {
     final statsAsync = ref.watch(adminDashboardStatsProvider);
 
@@ -119,18 +132,18 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
                 ),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.admin_panel_settings_rounded,
                     color: Color(0xFF38BDF8),
                     size: 36,
                   ),
-                  const SizedBox(width: 14),
+                  SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
+                      children: [
                         Text(
                           'Système Opérationnel',
                           style: TextStyle(
@@ -141,7 +154,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
                         ),
                         SizedBox(height: 3),
                         Text(
-                          'Surveillance de la cartographie et du trafic à Ouagadougou',
+                          'Surveillance cartographique nationale & Hub B2B/B2G',
                           style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
                         ),
                       ],
@@ -261,7 +274,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
     );
   }
 
-  // ---- Onglet 2 : Modération des Lieux & Signalements ----
+  // ====================================================
+  // ---- Onglet 2 : Modération des Lieux & Incidents ----
+  // ====================================================
   Widget _buildModerationTab() {
     final pendingPlacesAsync = ref.watch(pendingPlacesProvider);
     final activeReportsAsync = ref.watch(activeReportsProvider);
@@ -348,7 +363,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${place.quartier ?? 'Ouagadougou'} • ${place.adresse ?? ''}',
+                        '${place.quartier ?? 'Burkina Faso'} • ${place.adresse ?? ''}',
                         style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                       ),
                       const SizedBox(height: 12),
@@ -453,7 +468,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                             ),
                             Text(
-                              r.description ?? (r.quartier ?? 'Ouagadougou'),
+                              r.description ?? (r.quartier ?? 'Burkina Faso'),
                               style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                             ),
                           ],
@@ -476,7 +491,538 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
     );
   }
 
-  // ---- Onglet 3 : Catégories & Taxonomie Cartographique ----
+  // =========================================================================
+  // ---- Onglet 3 : Éditeur Carto Pro (GrabMaps style FASO NAV) ----
+  // =========================================================================
+  Widget _buildMapEditorTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Carte d'introduction
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF312E81), Color(0xFF1E1B4B)],
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.edit_road_rounded, color: Color(0xFFA5B4FC), size: 28),
+                  SizedBox(width: 10),
+                  Text(
+                    'Éditeur Carto Pro • Type GrabMaps',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Créez et mettez à jour la voirie locale, les feux tricolores et les coupures en temps réel sans attendre de mise à jour externe.',
+                style: TextStyle(fontSize: 12, color: Color(0xFFC7D2FE)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        const Text(
+          'Actions Cartographiques Administrateur',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+        ),
+        const SizedBox(height: 12),
+
+        // Action 1: Déposer un feu tricolore
+        _buildEditorActionCard(
+          title: 'Déposer un Feu Tricolore',
+          subtitle: 'Ancre vocale pour les voix Moore, Dioula & FR (« Au prochain feu... »)',
+          buttonText: 'Ajouter un Feu',
+          icon: Icons.traffic_rounded,
+          iconColor: const Color(0xFFD97706),
+          bgColor: const Color(0xFFFEF3C7),
+          onTap: () => AddTrafficSignalDialog.show(context),
+        ),
+        const SizedBox(height: 12),
+
+        // Action 2: Déclarer des travaux / voie coupée
+        _buildEditorActionCard(
+          title: 'Déclarer Travaux / Voie Coupée',
+          subtitle: 'Blocage immédiat d\'un axe avec recalcul automatique du tracé Valhalla',
+          buttonText: 'Bloquer une Voie',
+          icon: Icons.construction_rounded,
+          iconColor: const Color(0xFFDC2626),
+          bgColor: const Color(0xFFFEE2E2),
+          onTap: () => DeclareMaintenanceDialog.show(context),
+        ),
+        const SizedBox(height: 12),
+
+        // Action 3: Tracer une voie / 6-mètres / piste
+        _buildEditorActionCard(
+          title: 'Tracer une Nouvelle Voie (6-Mètres / Piste)',
+          subtitle: 'Numérisation souveraine de nouveaux lotissements et pistes rurales',
+          buttonText: 'Tracer la Voie',
+          icon: Icons.add_road_rounded,
+          iconColor: const Color(0xFF4338CA),
+          bgColor: const Color(0xFFE0E7FF),
+          onTap: () => TraceRoadDialog.show(context),
+        ),
+        const SizedBox(height: 20),
+
+        // Aperçu des ancres existantes
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Feux & Éléments Récemment Ajoutés',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF334155)),
+            ),
+            TextButton.icon(
+              onPressed: () => _tabController.animateTo(5),
+              icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+              label: const Text('Tout voir'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEditorActionCard({
+    required String title,
+    required String subtitle,
+    required String buttonText,
+    required IconData icon,
+    required Color iconColor,
+    required Color bgColor,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: bgColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: iconColor, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: onTap,
+              icon: Icon(icon, size: 16),
+              label: Text(buttonText),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: iconColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // ---- Onglet 4 : API B2B & Partenaires (Commercialisation & Quotas) ----
+  // =========================================================================
+  Widget _buildApiKeysTab() {
+    final apiKeysAsync = ref.watch(adminApiKeysProvider);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Carte d'introduction B2B
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0F766E), Color(0xFF134E4A)],
+            ),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.hub_rounded, color: Color(0xFF5EEAD4), size: 28),
+                  SizedBox(width: 10),
+                  Text(
+                    'FASO NAV Maps API • Hub B2B & B2G',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Plateforme souveraine d\'itinéraires, Distance Matrix et géolocalisation pour le SAMU, les Sapeurs-Pompiers, livreurs et VTC.',
+                style: TextStyle(fontSize: 12, color: Color(0xFFCCFBF1)),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () => CreateApiKeyDialog.show(context),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('Générer une Clé Partenaire'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2DD4BF),
+                  foregroundColor: const Color(0xFF134E4A),
+                  elevation: 0,
+                  textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Carte documentation endpoints
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.code_rounded, size: 18, color: Color(0xFF2563EB)),
+                  SizedBox(width: 8),
+                  Text(
+                    'Endpoints Commerciaux Actifs',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              _buildEndpointRow('POST /api/v1/matrix', 'Distance Matrix & Dispatch multi-points'),
+              const Divider(height: 12),
+              _buildEndpointRow('POST /api/v1/routes/calculate', 'Calcul d\'itinéraires d\'urgence & motos'),
+              const Divider(height: 12),
+              _buildEndpointRow('GET /api/v1/search', 'Recherche floue & géocodage Burkina'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Liste des clés API
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Partenaires B2B / B2G Enregistrés',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 20),
+              onPressed: () => ref.invalidate(adminApiKeysProvider),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        apiKeysAsync.when(
+          data: (keys) {
+            if (keys.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: const Center(
+                  child: Text(
+                    'Aucune clé API active. Cliquez ci-dessus pour en générer une.',
+                    style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                  ),
+                ),
+              );
+            }
+
+            return Column(
+              children: keys.map((keyModel) => _buildApiKeyCard(keyModel)).toList(),
+            );
+          },
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(24.0),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+          error: (e, _) => Text('Erreur : $e', style: const TextStyle(color: Colors.red)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEndpointRow(String method, String desc) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            method,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF0F172A),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            desc,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildApiKeyCard(ApiKeyModel key) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: key.isActive ? const Color(0xFFE2E8F0) : const Color(0xFFFECACA),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  key.name,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: key.isActive ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: key.clientType == ApiClientType.emergency
+                      ? const Color(0xFFFEE2E2)
+                      : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  key.clientType.label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: key.clientType == ApiClientType.emergency
+                        ? const Color(0xFFDC2626)
+                        : const Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // Clé masquée avec bouton copier
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${key.key.substring(0, (key.key.length > 18 ? 18 : key.key.length))}••••••••',
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF334155),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded, size: 16, color: Color(0xFF64748B)),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: key.key));
+                    AppSnackbar.showSuccess(context, message: 'Clé ${key.name} copiée !');
+                  },
+                  tooltip: 'Copier la clé',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // Jauge de quota
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Quota : ${key.currentUsage} / ${key.monthlyQuota <= 0 ? 'Illimité' : key.monthlyQuota}',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+              ),
+              Text(
+                key.tier.label,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0F766E)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: key.monthlyQuota <= 0 ? 0.05 : key.usagePercentage,
+              backgroundColor: const Color(0xFFF1F5F9),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                key.usagePercentage > 0.9 ? Colors.red : AppColors.primary,
+              ),
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // Actions toggle et supprimer
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Switch(
+                    value: key.isActive,
+                    onChanged: (val) async {
+                      await ref.read(adminApiKeysProvider.notifier).toggleKey(key.id);
+                      if (mounted) {
+                        AppSnackbar.showInfo(
+                          context,
+                          message: val ? 'Clé activée' : 'Clé suspendue',
+                        );
+                      }
+                    },
+                    activeThumbColor: AppColors.primary,
+                  ),
+                  Text(
+                    key.isActive ? 'Active' : 'Suspendue',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: key.isActive ? const Color(0xFF10B981) : Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Révoquer la clé API ?'),
+                      content: Text('Voulez-vous supprimer définitivement la clé pour "${key.name}" ?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(false),
+                          child: const Text('Annuler'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: const Text('Révoquer'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    await ref.read(adminApiKeysProvider.notifier).deleteKey(key.id);
+                    if (mounted) {
+                      AppSnackbar.showSuccess(context, message: 'Clé révoquée');
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // ---- Onglet 5 : Catégories & Taxonomie Cartographique ----
+  // =========================================================================
   Widget _buildCategoriesTab() {
     final categoriesAsync = ref.watch(categoriesProvider);
 
@@ -486,7 +1032,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
           padding: const EdgeInsets.all(16),
           children: [
             const Text(
-              'Taxonomie FASO NAV (${8} Catégories Officielles)',
+              'Taxonomie FASO NAV (Catégories Officielles)',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
@@ -558,7 +1104,9 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
     );
   }
 
-  // ---- Onglet 4 : Éléments Routiers & Ancres Narrateur v2 ----
+  // =========================================================================
+  // ---- Onglet 6 : Éléments Routiers & Ancres Narrateur v2 ----
+  // =========================================================================
   Widget _buildRoadFeaturesTab() {
     final roadFeaturesAsync = ref.watch(adminRoadFeaturesProvider);
 
@@ -567,14 +1115,36 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            const Text(
-              'Éléments Routiers Remarquables (Ancres de Guidage)',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Feux tricolores, ponts, échangeurs et carrefours utilisés par le Narrateur v2.',
-              style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Éléments Routiers Remarquables',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Feux tricolores, ponts, échangeurs pour le guidage vocal.',
+                        style: TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => AddTrafficSignalDialog.show(context),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Nouveau Feu'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD97706),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 14),
             if (features.isEmpty)
@@ -632,7 +1202,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                             ),
                             Text(
-                              'Type : ${feat.kind} • GPS : ${feat.latitude.toStringAsFixed(4)}, ${feat.longitude.toStringAsFixed(4)}',
+                              'Type : ${feat.kind.label} • GPS : ${feat.latitude.toStringAsFixed(4)}, ${feat.longitude.toStringAsFixed(4)}',
                               style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                             ),
                           ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvgestion_mobile/features/admin/data/models/admin_dashboard_stats_model.dart';
+import 'package:qvgestion_mobile/features/admin/data/models/api_key_model.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/providers/admin_providers.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/screens/admin_screen.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
@@ -18,6 +19,18 @@ const samplePendingPlace = PlaceModel(
   longitude: -1.4988,
   quartier: 'Dassasgho',
   adresse: 'Rue 14.22',
+);
+
+final sampleApiKey = ApiKeyModel(
+  id: 1,
+  key: 'faso_live_samu_urgence_bf_01',
+  name: 'SAMU 15 - Urgences Médicales',
+  clientType: ApiClientType.emergency,
+  tier: ApiTier.emergencyPriority,
+  monthlyQuota: -1,
+  currentUsage: 120,
+  isActive: true,
+  createdAt: DateTime(2026, 1, 1),
 );
 
 void main() {
@@ -60,6 +73,7 @@ void main() {
         activeReportsProvider.overrideWith(FakeActiveReportsNotifier.new),
         categoriesProvider.overrideWith((ref) async => sampleCategories),
         adminRoadFeaturesProvider.overrideWith((ref) async => []),
+        adminApiKeysProvider.overrideWith(FakeApiKeysNotifier.new),
       ],
       child: const MaterialApp(
         home: AdminScreen(),
@@ -67,8 +81,12 @@ void main() {
     );
   }
 
-  testWidgets('AdminScreen affiche les 4 onglets et les cartes KPI',
+  testWidgets('AdminScreen affiche les 6 onglets, KPIs, Éditeur Carto et API B2B',
       (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
     await tester.pumpWidget(createAdminTestWidget());
     await tester.pumpAndSettle();
 
@@ -76,9 +94,11 @@ void main() {
     expect(find.text('Console d\'Administration'), findsOneWidget);
     expect(find.text('FASO NAV • Back-Office & Modération'), findsOneWidget);
 
-    // Les 4 onglets
+    // Les onglets
     expect(find.text('Vue Globale'), findsOneWidget);
     expect(find.text('Modération'), findsOneWidget);
+    expect(find.text('Éditeur Carto'), findsOneWidget);
+    expect(find.text('API B2B'), findsOneWidget);
     expect(find.text('Catégories'), findsOneWidget);
     expect(find.text('Ancres Routières'), findsOneWidget);
 
@@ -97,6 +117,24 @@ void main() {
     expect(find.text('Approuver'), findsOneWidget);
     expect(find.text('Rejeter'), findsOneWidget);
 
+    // Basculer vers l'onglet Éditeur Carto
+    await tester.tap(find.text('Éditeur Carto'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Éditeur Carto Pro • Type GrabMaps'), findsOneWidget);
+    expect(find.text('Déposer un Feu Tricolore'), findsOneWidget);
+    expect(find.text('Déclarer Travaux / Voie Coupée'), findsOneWidget);
+    expect(find.text('Tracer une Nouvelle Voie (6-Mètres / Piste)'), findsOneWidget);
+
+    // Basculer vers l'onglet API B2B
+    await tester.tap(find.text('API B2B'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('FASO NAV Maps API • Hub B2B & B2G'), findsOneWidget);
+    expect(find.text('POST /api/v1/matrix'), findsOneWidget);
+    expect(find.text('SAMU 15 - Urgences Médicales'), findsOneWidget);
+    expect(find.text('Active'), findsOneWidget);
+
     // Basculer vers l'onglet Catégories
     await tester.tap(find.text('Catégories'));
     await tester.pumpAndSettle();
@@ -113,7 +151,7 @@ class FakePendingPlacesNotifier extends PendingPlacesNotifier {
   }
 
   @override
-  Future<void> moderate({required int placeId, required bool approve}) async {
+  Future<void> moderate({required int placeId, required bool approve, String? reason}) async {
     // No-op pour le test
   }
 }
@@ -121,4 +159,17 @@ class FakePendingPlacesNotifier extends PendingPlacesNotifier {
 class FakeActiveReportsNotifier extends ActiveReportsNotifier {
   @override
   AsyncValue<List<ReportModel>> build() => const AsyncValue.data([]);
+}
+
+class FakeApiKeysNotifier extends ApiKeysNotifier {
+  @override
+  Future<List<ApiKeyModel>> build() async {
+    return [sampleApiKey];
+  }
+
+  @override
+  Future<void> toggleKey(int id) async {}
+
+  @override
+  Future<void> deleteKey(int id) async {}
 }
