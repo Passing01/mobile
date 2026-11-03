@@ -76,24 +76,27 @@ void main() {
 
     test('searchPlaces effectue la requête de recherche textuelle', () async {
       when(() => mockApiClient.get<dynamic>(
-            ApiEndpoints.placesSearch,
-            queryParameters: {
-              'q': 'Rood-Woko',
-              'limit': 20,
-            },
+            any(),
+            queryParameters: any(named: 'queryParameters'),
+            cancelToken: any(named: 'cancelToken'),
           )).thenAnswer((_) async => Response(
-            requestOptions: RequestOptions(path: ApiEndpoints.placesSearch),
+            requestOptions: RequestOptions(path: ApiEndpoints.search),
             statusCode: 200,
-            data: [
-              {
-                'id': 4,
-                'nom': 'Grand Marché Rood-Woko',
-                'categorie_id': 3,
-                'latitude': 12.3685,
-                'longitude': -1.5222,
-                'est_valide': true,
-              }
-            ],
+            data: {
+              'results': [
+                {
+                  'id': 4,
+                  'nom': 'Grand Marché Rood-Woko',
+                  'categorie_id': 3,
+                  'latitude': 12.3685,
+                  'longitude': -1.5222,
+                  'est_valide': true,
+                }
+              ],
+              'count': 1,
+              'suggestions': [],
+              'message': null,
+            },
           ));
 
       final results = await repository.searchPlaces(query: 'Rood-Woko');

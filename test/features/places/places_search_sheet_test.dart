@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
+import 'package:qvgestion_mobile/features/places/data/models/search_models.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/places_search_sheet.dart';
 
@@ -33,6 +34,10 @@ void main() {
         overrides: [
           nearbyPlacesProvider.overrideWith((ref) async => [samplePlace]),
           searchResultsProvider.overrideWith((ref) async => []),
+          searchUniversalResultProvider.overrideWith(
+            (ref) async => const SearchResultModel(),
+          ),
+          searchAliasesProvider.overrideWith((ref) async => []),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -75,6 +80,13 @@ void main() {
         overrides: [
           nearbyPlacesProvider.overrideWith((ref) async => [samplePlace]),
           searchResultsProvider.overrideWith((ref) async => [searchMatch]),
+          searchUniversalResultProvider.overrideWith(
+            (ref) async => const SearchResultModel(
+              places: [searchMatch],
+              count: 1,
+            ),
+          ),
+          searchAliasesProvider.overrideWith((ref) async => []),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -89,7 +101,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Saisie d'un texte de recherche
-    await tester.enterText(find.byType(TextField), 'Rood');
+    await tester.enterText(find.byType(TextField).first, 'Rood');
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
 
     // Les résultats de recherche s'affichent

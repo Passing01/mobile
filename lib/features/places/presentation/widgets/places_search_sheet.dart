@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/services/location_service.dart';
+import 'package:qvgestion_mobile/core/services/search_history_service.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_empty_state.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_error_state.dart';
@@ -8,6 +9,7 @@ import 'package:qvgestion_mobile/core/widgets/loaders/app_shimmer.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/save_place_modal.dart';
+import 'package:qvgestion_mobile/features/places/presentation/widgets/voice_search_sheet.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 
 /// Résultat d'une planification d'itinéraire multi-points (style Google Maps)
@@ -164,6 +166,17 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
       mode: _selectedMode,
     );
 
+    // Enregistrer dans l'historique local pour relance en 1 tap (Étape 11)
+    ref.read(searchHistoryProvider.notifier).addRoute(
+          originName: orig.name ?? 'Départ',
+          originLat: orig.lat,
+          originLon: orig.lon,
+          destName: dest.name ?? 'Destination',
+          destLat: dest.lat,
+          destLon: dest.lon,
+          mode: _selectedMode,
+        );
+
     widget.onPlaceSelected(result);
   }
 
@@ -223,7 +236,6 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
   /// Onglet 1 : Recherche simple d'un lieu
   Widget _buildSingleSearchTab() {
     final query = ref.watch(searchQueryProvider);
-    final searchResultsAsync = ref.watch(searchResultsProvider);
     final nearbyPlacesAsync = ref.watch(nearbyPlacesProvider);
 
     return Column(
@@ -253,12 +265,31 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
                         color: AppColors.primary,
                         size: 22,
                       ),
-                      suffixIcon: query.isNotEmpty
-                          ? IconButton(
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (query.isNotEmpty)
+                            IconButton(
                               icon: const Icon(Icons.clear_rounded, size: 18),
                               onPressed: _clearSearch,
-                            )
-                          : null,
+                            ),
+                          IconButton(
+                            icon: const Icon(Icons.mic_rounded,
+                                color: AppColors.primary, size: 20),
+                            tooltip: 'Recherche vocale en français',
+                            onPressed: () async {
+                              final selectedPlace =
+                                  await VoiceSearchSheet.show(context);
+                              if (selectedPlace != null) {
+                                ref
+                                    .read(searchHistoryProvider.notifier)
+                                    .addPlace(selectedPlace);
+                                widget.onPlaceSelected(selectedPlace);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(vertical: 14),
                     ),
@@ -279,6 +310,10 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
             ],
           ),
         ),
+
+        // Raccourcis de catégories dynamiques (Étape 11)
+        _buildDynamicCategoryPills(),
+        const SizedBox(height: 6),
 
         // Action rapide : Enregistrer ma position
         Padding(
@@ -326,13 +361,13 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
           ),
         ),
 
-        const Divider(height: 16, thickness: 1, color: Color(0xFFF3F4F6)),
+        const Divider(height: 12, thickness: 1, color: Color(0xFFF3F4F6)),
 
-        // Résultats
+        // Résultats ou Historique local
         Expanded(
           child: query.trim().isEmpty
-              ? _buildDefaultNearbySection(nearbyPlacesAsync)
-              : _buildSearchResultsSection(searchResultsAsync, query),
+              ? _buildHistoryOrNearbySection(nearbyPlacesAsync)
+              : _buildSearchResultsSection(query.trim()),
         ),
       ],
     );
@@ -561,6 +596,213 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
     );
   }
 
+  /// Raccourcis de catégories dynamiques (Étape 11)
+  Widget _buildDynamicCategoryPills() {
+    final aliasesAsync = ref.watch(searchAliasesProvider);
+
+    return aliasesAsync.when(
+      data: (aliases) {
+        if (aliases.isEmpty) return const SizedBox.shrink();
+        return SizedBox(
+          height: 36,
+          child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            scrollDirection: Axis.horizontal,
+            itemCount: aliases.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final item = aliases[index];
+              return InkWell(
+                onTap: () {
+                  _searchController.text = item.alias;
+                  ref.read(searchQueryProvider.notifier).setQuery(item.alias);
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: item.colorValue.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: item.colorValue.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(item.iconData, size: 16, color: item.colorValue),
+                      const SizedBox(width: 6),
+                      Text(
+                        item.label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: item.colorValue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+      loading: () => const SizedBox.shrink(),
+      error: (e, st) => const SizedBox.shrink(),
+    );
+  }
+
+  /// Historique de recherche local (Étape 11 - max 20, 0 réseau) ou lieux proches
+  Widget _buildHistoryOrNearbySection(
+    AsyncValue<List<PlaceModel>> nearbyPlacesAsync,
+  ) {
+    final history = ref.watch(searchHistoryProvider);
+
+    if (history.isNotEmpty) {
+      return ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                const Icon(Icons.history_rounded,
+                    size: 18, color: Color(0xFF64748B)),
+                const SizedBox(width: 8),
+                Text(
+                  'Recherches récentes (${history.length})',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF334155),
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    ref.read(searchHistoryProvider.notifier).clearHistory();
+                  },
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(50, 30),
+                  ),
+                  child: const Text(
+                    'Effacer l\'historique',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFFDC2626),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...history.map((item) => _buildHistoryItemTile(item)),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          const SizedBox(height: 12),
+          _buildDefaultNearbySection(nearbyPlacesAsync),
+        ],
+      );
+    }
+
+    return _buildDefaultNearbySection(nearbyPlacesAsync);
+  }
+
+  Widget _buildHistoryItemTile(SearchHistoryItem item) {
+    IconData icon;
+    Color iconColor;
+
+    switch (item.kind) {
+      case SearchHistoryKind.query:
+        icon = Icons.history_rounded;
+        iconColor = const Color(0xFF64748B);
+        break;
+      case SearchHistoryKind.place:
+        icon = Icons.place_rounded;
+        iconColor = AppColors.primary;
+        break;
+      case SearchHistoryKind.route:
+        icon = Icons.alt_route_rounded;
+        iconColor = const Color(0xFFF59E0B);
+        break;
+    }
+
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: iconColor, size: 18),
+      ),
+      title: Text(
+        item.label,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF1E293B),
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: item.subtitle != null
+          ? Text(
+              item.subtitle!,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
+          : null,
+      trailing: IconButton(
+        icon: const Icon(Icons.close_rounded, size: 16, color: Color(0xFF94A3B8)),
+        onPressed: () {
+          ref.read(searchHistoryProvider.notifier).deleteItem(item.id);
+        },
+      ),
+      onTap: () {
+        if (item.kind == SearchHistoryKind.query) {
+          _searchController.text = item.label;
+          ref.read(searchQueryProvider.notifier).setQuery(item.label);
+        } else if (item.kind == SearchHistoryKind.place) {
+          final place = PlaceModel(
+            id: item.placeId ?? 0,
+            nom: item.label,
+            categorieId: 1,
+            latitude: item.latitude ?? 12.3685,
+            longitude: item.longitude ?? -1.5222,
+            quartier: item.subtitle,
+          );
+          ref.read(searchHistoryProvider.notifier).addPlace(place);
+          widget.onPlaceSelected(place);
+        } else if (item.kind == SearchHistoryKind.route && item.routeData != null) {
+          final rd = item.routeData!;
+          final res = RoutePlannerResult(
+            origin: CoordinateModel(
+              lat: (rd['originLat'] as num).toDouble(),
+              lon: (rd['originLon'] as num).toDouble(),
+              name: rd['originName'] as String?,
+            ),
+            destination: CoordinateModel(
+              lat: (rd['destLat'] as num).toDouble(),
+              lon: (rd['destLon'] as num).toDouble(),
+              name: rd['destName'] as String?,
+            ),
+            mode: rd['mode'] as String? ?? 'moto',
+          );
+          widget.onPlaceSelected(res);
+        }
+      },
+    );
+  }
+
   /// Liste des lieux à proximité immédiate
   Widget _buildDefaultNearbySection(AsyncValue<List<PlaceModel>> nearbyAsync) {
     return nearbyAsync.when(
@@ -573,7 +815,9 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
           );
         }
         return ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -597,7 +841,9 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
         );
       },
       loading: () => ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
         itemCount: 4,
         separatorBuilder: (context, index) => const SizedBox(height: 12),
         itemBuilder: (context, index) => const PoiCardShimmer(),
@@ -610,29 +856,71 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
     );
   }
 
-  /// Résultats de la recherche en direct
-  Widget _buildSearchResultsSection(
-    AsyncValue<List<PlaceModel>> searchAsync,
-    String query,
-  ) {
+  /// Résultats de la recherche universelle avec suggestions de repli (Étape 11)
+  Widget _buildSearchResultsSection(String query) {
+    final searchAsync = ref.watch(searchResultsProvider);
+    final universalAsync = ref.watch(searchUniversalResultProvider);
+    final suggestions = universalAsync.value?.suggestions ?? const [];
+    final message = universalAsync.value?.message;
+
     return searchAsync.when(
-      data: (results) {
-        if (results.isEmpty) {
-          return AppEmptyState(
-            icon: Icons.search_off_rounded,
-            title: 'Aucun résultat trouvé',
-            message: 'Aucun lieu ne correspond à "$query" dans notre base locale.',
+      data: (places) {
+        if (places.isEmpty) {
+          return ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            children: [
+              AppEmptyState(
+                icon: Icons.search_off_rounded,
+                title: 'Aucun résultat trouvé',
+                message: message ??
+                    'Aucun lieu ne correspond à "$query" dans notre base.',
+              ),
+              if (suggestions.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                const Text(
+                  'Suggestions proches :',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF334155),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: suggestions.map((sug) {
+                    return ActionChip(
+                      avatar: const Icon(Icons.search_rounded,
+                          size: 16, color: AppColors.primary),
+                      label: Text(sug),
+                      labelStyle: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                      backgroundColor: AppColors.primaryLight,
+                      onPressed: () {
+                        _searchController.text = sug;
+                        ref.read(searchQueryProvider.notifier).setQuery(sug);
+                      },
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
           );
         }
+
         return ListView.separated(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: results.length,
+          itemCount: places.length,
           separatorBuilder: (context, index) => const Divider(
             height: 1,
             color: Color(0xFFF3F4F6),
           ),
           itemBuilder: (context, index) {
-            final place = results[index];
+            final place = places[index];
             return _buildPlaceTile(place);
           },
         );
@@ -645,7 +933,7 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
       ),
       error: (err, _) => AppErrorState(
         title: 'Erreur de recherche',
-        message: 'Échec de la recherche en ligne ($err)',
+        message: 'Échec de la recherche ($err)',
         onRetry: () => ref.invalidate(searchResultsProvider),
       ),
     );
@@ -653,6 +941,7 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
 
   Widget _buildPlaceTile(PlaceModel place) {
     final catIcon = place.categorie?.iconData ?? Icons.place_rounded;
+    final catColor = place.categorie?.displayColor ?? AppColors.primary;
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(vertical: 4),
@@ -660,10 +949,10 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: AppColors.primaryLight,
+          color: catColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(catIcon, color: AppColors.primary, size: 24),
+        child: Icon(catIcon, color: catColor, size: 24),
       ),
       title: Text(
         place.nom,
@@ -728,6 +1017,11 @@ class _PlacesSearchSheetState extends ConsumerState<PlacesSearchSheet>
         ),
       ),
       onTap: () {
+        ref.read(searchHistoryProvider.notifier).addPlace(place);
+        final q = ref.read(searchQueryProvider).trim();
+        if (q.isNotEmpty) {
+          ref.read(searchHistoryProvider.notifier).addQuery(q);
+        }
         widget.onPlaceSelected(place);
       },
     );

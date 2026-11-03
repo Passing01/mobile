@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +10,7 @@ import 'package:qvgestion_mobile/core/services/location_service.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
+import 'package:qvgestion_mobile/features/places/data/models/search_models.dart';
 import 'package:qvgestion_mobile/features/places/data/repositories/places_repository.dart';
 
 /// Provider du repository des lieux & catégories réels
@@ -1675,20 +1677,52 @@ class SearchQueryNotifier extends Notifier<String> {
 final searchQueryProvider =
     NotifierProvider<SearchQueryNotifier, String>(SearchQueryNotifier.new);
 
-/// Résultats de recherche en direct connectés au backend et cache hors-ligne
-final searchResultsProvider = FutureProvider<List<PlaceModel>>((ref) async {
-  final query = ref.watch(searchQueryProvider);
-  if (query.trim().isEmpty) {
-    return [];
+/// Provider des raccourcis de catégories dynamiques (Étape 11)
+final searchAliasesProvider =
+    FutureProvider<List<SearchAliasModel>>((ref) async {
+  final repository = ref.watch(placesRepositoryProvider);
+  return repository.fetchSearchAliases();
+});
+
+/// Recherche universelle avec debounce 250ms et annulation de requête (CancelToken)
+final searchUniversalResultProvider =
+    FutureProvider.autoDispose<SearchResultModel>((ref) async {
+  final query = ref.watch(searchQueryProvider).trim();
+  if (query.isEmpty) {
+    return const SearchResultModel();
   }
+
+  // Debounce 250 ms pour fluidifier la saisie et ménager la bande passante
+  await Future.delayed(const Duration(milliseconds: 250));
+
+  final cancelToken = CancelToken();
+  ref.onDispose(() {
+    cancelToken.cancel('Recherche annulée suite à une nouvelle saisie');
+  });
+
   final repository = ref.watch(placesRepositoryProvider);
   final location = ref.watch(currentLocationProvider);
-  return repository.searchPlaces(
-    query: query.trim(),
-    currentLat: location.lat,
-    currentLon: location.lon,
-    limit: 25,
-  );
+
+  try {
+    return await repository.searchUniversal(
+      query: query,
+      currentLat: location.lat,
+      currentLon: location.lon,
+      limit: 25,
+      cancelToken: cancelToken,
+    );
+  } on DioException catch (e) {
+    if (CancelToken.isCancel(e)) {
+      return const SearchResultModel();
+    }
+    rethrow;
+  }
+});
+
+/// Résultats de recherche en direct connectés au backend et cache hors-ligne
+final searchResultsProvider = FutureProvider<List<PlaceModel>>((ref) async {
+  final result = await ref.watch(searchUniversalResultProvider.future);
+  return result.places;
 });
 
 /// Indicateur d'affichage de la superposition de recherche

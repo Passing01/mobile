@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qvgestion_mobile/core/config/app_constants.dart';
 import 'package:qvgestion_mobile/core/config/env_config.dart';
 import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
+import 'package:qvgestion_mobile/core/services/search_history_service.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/theme/app_theme.dart';
 import 'package:qvgestion_mobile/core/theme/theme_provider.dart';
@@ -11,10 +13,14 @@ import 'package:qvgestion_mobile/features/navigation/presentation/screens/main_t
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EnvConfig.initializeAsync();
+  final prefs = await SharedPreferences.getInstance();
 
   runApp(
-    const ProviderScope(
-      child: QvGestionApp(),
+    ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+      ],
+      child: const QvGestionApp(),
     ),
   );
 }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qvgestion_mobile/core/config/app_config.dart';
 import 'package:qvgestion_mobile/core/errors/app_error_reporter.dart';
@@ -8,6 +9,7 @@ import 'package:qvgestion_mobile/core/network/api_endpoints.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
+import 'package:qvgestion_mobile/features/places/data/models/search_models.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 
 /// Repository pour interagir avec les endpoints réels de catégories et lieux (POI)
@@ -459,8 +461,144 @@ class PlacesRepository {
     }
   }
 
-  /// Recherche des lieux par mot-clé depuis GET /api/v1/places/search
-  /// avec cache local, tolérance hors-ligne et calcul de proximité
+  /// Récupère la liste dynamique des pastilles / alias de recherche par catégorie (Étape 11)
+  Future<List<SearchAliasModel>> fetchSearchAliases() async {
+    try {
+      final response = await apiClient.get<dynamic>(ApiEndpoints.searchAliases);
+      final list = response.data as List<dynamic>;
+      return list
+          .map((e) => SearchAliasModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      AppLogger.w('Erreur récupération alias de recherche: $e');
+      return const [];
+    }
+  }
+
+  /// Recherche universelle Étape 11 (texte flou, alias de catégorie, proximité)
+  Future<SearchResultModel> searchUniversal({
+    required String query,
+    double? currentLat,
+    double? currentLon,
+    String? categories,
+    int limit = 20,
+    CancelToken? cancelToken,
+  }) async {
+    final q = query.trim();
+    if (q.isEmpty) {
+      return const SearchResultModel();
+    }
+
+    try {
+      final queryParams = <String, dynamic>{
+        'q': q,
+        'limit': limit,
+      };
+      if (currentLat != null && currentLon != null) {
+        queryParams['near'] = '$currentLat,$currentLon';
+      }
+      if (categories != null && categories.isNotEmpty) {
+        queryParams['categories'] = categories;
+      }
+
+      final response = await apiClient.get<dynamic>(
+        ApiEndpoints.search,
+        queryParameters: queryParams,
+        cancelToken: cancelToken,
+      );
+
+      SearchResultModel result;
+      if (response.data is Map<String, dynamic>) {
+        result =
+            SearchResultModel.fromJson(response.data as Map<String, dynamic>);
+      } else if (response.data is List<dynamic>) {
+        final places = (response.data as List<dynamic>)
+            .map((e) => PlaceModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+        result = SearchResultModel(places: places, count: places.length);
+      } else {
+        result = const SearchResultModel();
+      }
+
+      if (result.places.isNotEmpty) {
+        await _savePlacesToCache(result.places);
+      }
+      return result;
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        rethrow;
+      }
+      return _searchOfflineFallback(q, currentLat, currentLon);
+    } catch (e, st) {
+      AppErrorReporter.reportError(
+        'Erreur recherche universelle de lieux',
+        error: e,
+        stackTrace: st,
+        tag: 'PlacesAPI',
+      );
+      return _searchOfflineFallback(q, currentLat, currentLon);
+    }
+  }
+
+  Future<SearchResultModel> _searchOfflineFallback(
+    String query,
+    double? currentLat,
+    double? currentLon,
+  ) async {
+    final cached = await _getCachedPlaces();
+    final allMap = <int, PlaceModel>{};
+
+    if (AppConfig.testMode) {
+      for (final p in defaultOuagaIconicPlaces) {
+        allMap[p.id] = p;
+      }
+    }
+    for (final p in cached) {
+      allMap[p.id] = p;
+    }
+
+    final q = query.toLowerCase();
+    final results = <PlaceModel>[];
+    for (final p in allMap.values) {
+      final nom = p.nom.toLowerCase();
+      final desc = (p.description ?? '').toLowerCase();
+      final quart = (p.quartier ?? '').toLowerCase();
+      final cat = (p.categorie?.nom ?? '').toLowerCase();
+      final slug = (p.categorie?.slug ?? '').toLowerCase();
+
+      final matches = nom.contains(q) ||
+          desc.contains(q) ||
+          quart.contains(q) ||
+          cat.contains(q) ||
+          slug.contains(q);
+
+      if (matches) {
+        if (currentLat != null && currentLon != null) {
+          final dist = _calculateDistanceMeters(
+              currentLat, currentLon, p.latitude, p.longitude);
+          results.add(p.copyWith(distanceMeters: dist));
+        } else {
+          results.add(p);
+        }
+      }
+    }
+
+    if (currentLat != null && currentLon != null) {
+      results.sort((a, b) =>
+          (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
+    }
+
+    return SearchResultModel(
+      places: results,
+      count: results.length,
+      suggestions: results.isEmpty
+          ? const ['Pharmacie de garde', 'Station Total', 'Hôpital / Santé', 'Maquis']
+          : const [],
+      message: results.isEmpty ? 'Aucun lieu trouvé hors-ligne pour "$query"' : null,
+    );
+  }
+
+  /// Recherche des lieux par mot-clé avec cache local et tolérance hors-ligne
   Future<List<PlaceModel>> searchPlaces({
     required String query,
     double? currentLat,
@@ -469,101 +607,16 @@ class PlacesRepository {
     String? quartier,
     int? categorieId,
     int limit = 20,
+    CancelToken? cancelToken,
   }) async {
-    final q = query.trim().toLowerCase();
-    List<PlaceModel> fetched = [];
-
-    try {
-      final queryParams = <String, dynamic>{
-        'q': query.trim(),
-        'limit': limit,
-      };
-      if (ville != null && ville.isNotEmpty) {
-        queryParams['ville'] = ville;
-      }
-      if (quartier != null && quartier.isNotEmpty) {
-        queryParams['quartier'] = quartier;
-      }
-      if (categorieId != null) {
-        queryParams['categorie_id'] = categorieId;
-      }
-
-      final response = await apiClient.get<dynamic>(
-        ApiEndpoints.placesSearch,
-        queryParameters: queryParams,
-      );
-
-      final list = response.data as List<dynamic>;
-      fetched = list
-          .map((item) => PlaceModel.fromJson(item as Map<String, dynamic>))
-          .toList();
-
-      if (fetched.isNotEmpty) {
-        await _savePlacesToCache(fetched);
-      }
-
-      // Enrichir avec les distances exactes si coordonnées disponibles
-      if (currentLat != null && currentLon != null) {
-        return fetched.map((p) {
-          final dist = _calculateDistanceMeters(
-              currentLat, currentLon, p.latitude, p.longitude);
-          return p.copyWith(distanceMeters: dist);
-        }).toList()
-          ..sort((a, b) =>
-              (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
-      }
-      return fetched;
-    } catch (e, st) {
-      AppErrorReporter.reportError(
-        'Erreur lors de la recherche de lieux',
-        error: e,
-        stackTrace: st,
-        tag: 'PlacesAPI',
-      );
-      final cached = await _getCachedPlaces();
-      final allMap = <int, PlaceModel>{};
-
-      if (AppConfig.testMode) {
-        for (final p in defaultOuagaIconicPlaces) {
-          allMap[p.id] = p;
-        }
-      }
-      for (final p in cached) {
-        allMap[p.id] = p;
-      }
-
-      final results = <PlaceModel>[];
-      for (final p in allMap.values) {
-        final nom = p.nom.toLowerCase();
-        final desc = (p.description ?? '').toLowerCase();
-        final quart = (p.quartier ?? '').toLowerCase();
-        final cat = (p.categorie?.nom ?? '').toLowerCase();
-        final slug = (p.categorie?.slug ?? '').toLowerCase();
-
-        final matches = nom.contains(q) ||
-            desc.contains(q) ||
-            quart.contains(q) ||
-            cat.contains(q) ||
-            slug.contains(q);
-
-        if (matches) {
-          if (currentLat != null && currentLon != null) {
-            final dist = _calculateDistanceMeters(
-                currentLat, currentLon, p.latitude, p.longitude);
-            results.add(p.copyWith(distanceMeters: dist));
-          } else {
-            results.add(p);
-          }
-        }
-      }
-
-      if (currentLat != null && currentLon != null) {
-        results.sort((a, b) =>
-            (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
-      }
-
-      return results;
-    }
+    final res = await searchUniversal(
+      query: query,
+      currentLat: currentLat,
+      currentLon: currentLon,
+      limit: limit,
+      cancelToken: cancelToken,
+    );
+    return res.places;
   }
 
   /// Recherche un lieu par son ID dans le stockage local hors-ligne

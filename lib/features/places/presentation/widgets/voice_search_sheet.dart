@@ -163,8 +163,10 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
         await _speech.listen(
           listenOptions: stt.SpeechListenOptions(
             partialResults: true,
+            localeId: 'fr_FR',
           ),
           onResult: (result) {
+            AppLogger.i("[VOIX-REC] entendu='${result.recognizedWords}' final=${result.finalResult}");
             if (mounted) {
               setState(() {
                 _spokenText = result.recognizedWords;
@@ -211,28 +213,26 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
     }
   }
 
-  void _processSpokenText(String text) {
+  void _processSpokenText(String text) async {
     final query = text.toLowerCase().trim();
+    if (query.isEmpty) return;
 
-    // 1. Chercher dans le catalogue des lieux (uniquement en mode test)
-    if (AppConfig.testMode) {
-      for (final p in defaultOuagaIconicPlaces) {
-        final nomLower = p.nom.toLowerCase();
-        final quartierLower = (p.quartier ?? '').toLowerCase();
-        final catSlug = (p.categorie?.slug ?? '').toLowerCase();
+    // 1. Recherche via le repository universel
+    try {
+      final repo = ref.read(placesRepositoryProvider);
+      final loc = ref.read(currentLocationProvider);
+      final searchRes = await repo.searchUniversal(
+        query: text,
+        currentLat: loc.lat,
+        currentLon: loc.lon,
+        limit: 5,
+      );
 
-        if (query.contains(nomLower) ||
-            (nomLower.contains('pharmacie') && query.contains('pharmacie')) ||
-            (nomLower.contains('station') && query.contains('station')) ||
-            (catSlug.contains('pharmacie') && query.contains('pharmacie')) ||
-            (quartierLower.isNotEmpty && query.contains(quartierLower) && nomLower.contains('pharmacie'))) {
-          _selectPlace(
-            place: p,
-          );
-          return;
-        }
+      if (searchRes.places.isNotEmpty) {
+        _selectPlace(place: searchRes.places.first);
+        return;
       }
-    }
+    } catch (_) {}
 
     // 2. Chercher dans les suggestions rapides de la modal
     for (final item in _quickVoicePrompts) {
@@ -249,19 +249,10 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
       }
     }
 
-    // 3. Si non trouvé : en mode test uniquement, créer une destination fictive de test
-    if (AppConfig.testMode) {
-      _selectPlace(
-        name: text,
-        lat: 12.3685,
-        lon: -1.5222,
-        quartier: 'Ouagadougou (Test)',
-      );
-    } else {
-      AppErrorReporter.reportError(
-        'Lieu non reconnu : "$text". Veuillez reformuler ou sélectionner un lieu sur la carte.',
-        tag: 'Recherche vocale',
-      );
+    // 3. Si non trouvé : définir la requête et renvoyer vers la recherche textuelle
+    ref.read(searchQueryProvider.notifier).setQuery(text);
+    if (mounted) {
+      Navigator.of(context).pop();
     }
   }
 
