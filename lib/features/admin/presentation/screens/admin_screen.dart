@@ -6,10 +6,13 @@ import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/features/admin/data/models/api_key_model.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/providers/admin_providers.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/add_traffic_signal_dialog.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_reset_password_dialog.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_user_detail_dialog.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/broadcast_geo_alert_modal.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/create_api_key_dialog.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/declare_maintenance_dialog.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/trace_road_dialog.dart';
+import 'package:qvgestion_mobile/features/auth/data/models/user_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
 import 'package:qvgestion_mobile/features/reports/presentation/providers/reports_providers.dart';
 
@@ -28,7 +31,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
   }
 
   @override
@@ -44,6 +47,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
     ref.invalidate(categoriesProvider);
     ref.invalidate(adminRoadFeaturesProvider);
     ref.invalidate(adminApiKeysProvider);
+    ref.invalidate(adminUsersProvider);
     AppSnackbar.showInfo(context, message: 'Données actualisées');
   }
 
@@ -93,6 +97,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
             Tab(icon: Icon(Icons.verified_user_rounded, size: 18), text: 'Modération'),
             Tab(icon: Icon(Icons.edit_location_alt_rounded, size: 18), text: 'Éditeur Carto'),
             Tab(icon: Icon(Icons.vpn_key_rounded, size: 18), text: 'API B2B'),
+            Tab(icon: Icon(Icons.people_alt_rounded, size: 18), text: 'Équipe & Admins'),
             Tab(icon: Icon(Icons.category_rounded, size: 18), text: 'Catégories'),
             Tab(icon: Icon(Icons.traffic_rounded, size: 18), text: 'Ancres Routières'),
           ],
@@ -105,6 +110,7 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
           _buildModerationTab(),
           _buildMapEditorTab(),
           _buildApiKeysTab(),
+          _buildUsersTab(),
           _buildCategoriesTab(),
           _buildRoadFeaturesTab(),
         ],
@@ -1021,7 +1027,262 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
   }
 
   // =========================================================================
-  // ---- Onglet 5 : Catégories & Taxonomie Cartographique ----
+  // ---- Onglet 5 : Gestion des Administrateurs & Utilisateurs ----
+  // =========================================================================
+  Widget _buildUsersTab() {
+    final usersAsync = ref.watch(adminUsersProvider);
+    final activeRole = ref.watch(adminUsersFilterRoleProvider);
+
+    return Column(
+      children: [
+        // Zone de recherche & Filtres
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+          color: Colors.white,
+          child: Column(
+            children: [
+              TextField(
+                decoration: InputDecoration(
+                  hintText: 'Rechercher un admin ou usager (nom, email, tél)...',
+                  hintStyle: const TextStyle(fontSize: 12),
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  filled: true,
+                  fillColor: const Color(0xFFF1F5F9),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onChanged: (val) {
+                  ref.read(adminUsersSearchProvider.notifier).setSearch(val);
+                },
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildRoleFilterChip('Tous', null, activeRole == null),
+                    const SizedBox(width: 6),
+                    _buildRoleFilterChip('Admins', 'admin', activeRole == 'admin'),
+                    const SizedBox(width: 6),
+                    _buildRoleFilterChip('Modérateurs', 'moderator', activeRole == 'moderator'),
+                    const SizedBox(width: 6),
+                    _buildRoleFilterChip('Usagers', 'user', activeRole == 'user'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+
+        // Liste des utilisateurs
+        Expanded(
+          child: usersAsync.when(
+            data: (users) {
+              if (users.isEmpty) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(32.0),
+                    child: Text(
+                      'Aucun utilisateur ne correspond aux critères.',
+                      style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+                    ),
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: users.length,
+                itemBuilder: (ctx, i) => _buildUserCard(users[i]),
+              );
+            },
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32.0),
+                child: CircularProgressIndicator(),
+              ),
+            ),
+            error: (e, _) => Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Erreur de chargement : $e', style: const TextStyle(color: Colors.red)),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: () => ref.invalidate(adminUsersProvider),
+                      child: const Text('Réessayer'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRoleFilterChip(String label, String? roleSlug, bool isSelected) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        color: isSelected ? Colors.white : const Color(0xFF475569),
+      ),
+      selectedColor: AppColors.primary,
+      backgroundColor: const Color(0xFFF1F5F9),
+      onSelected: (_) {
+        ref.read(adminUsersFilterRoleProvider.notifier).setRole(roleSlug);
+      },
+    );
+  }
+
+  Widget _buildUserCard(UserModel user) {
+    final isAdmin = user.role.toLowerCase() == 'admin';
+    final isMod = user.role.toLowerCase() == 'moderator';
+
+    final Color badgeColor = isAdmin
+        ? const Color(0xFFDC2626)
+        : (isMod ? const Color(0xFF2563EB) : const Color(0xFF64748B));
+
+    final Color badgeBg = isAdmin
+        ? const Color(0xFFFEE2E2)
+        : (isMod ? const Color(0xFFEFF6FF) : const Color(0xFFF1F5F9));
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: user.isActive ? const Color(0xFFE2E8F0) : const Color(0xFFFECACA),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: badgeColor,
+                child: Text(
+                  user.initiales,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user.nom,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: user.isActive ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                    Text(
+                      user.email ?? (user.telephone.isNotEmpty ? user.telephone : 'ID #${user.id}'),
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  user.role.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Switch(
+                    value: user.isActive,
+                    activeThumbColor: AppColors.primary,
+                    onChanged: (val) async {
+                      await ref.read(adminUsersProvider.notifier).toggleStatus(user.id, val);
+                      if (mounted) {
+                        AppSnackbar.showInfo(
+                          context,
+                          message: val ? 'Compte de ${user.nom} activé' : 'Compte de ${user.nom} suspendu',
+                        );
+                      }
+                    },
+                  ),
+                  Text(
+                    user.isActive ? 'Actif' : 'Suspendu',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: user.isActive ? const Color(0xFF10B981) : Colors.red,
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => AdminResetPasswordDialog.show(context, user: user),
+                    icon: const Icon(Icons.lock_reset_rounded, size: 14, color: Color(0xFFDC2626)),
+                    label: const Text('MDP', style: TextStyle(fontSize: 11, color: Color(0xFFDC2626))),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      side: const BorderSide(color: Color(0xFFFECACA)),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  ElevatedButton.icon(
+                    onPressed: () => AdminUserDetailDialog.show(context, user: user),
+                    icon: const Icon(Icons.visibility_rounded, size: 14),
+                    label: const Text('Détails', style: TextStyle(fontSize: 11)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF2563EB),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // =========================================================================
+  // ---- Onglet 6 : Catégories & Taxonomie Cartographique ----
   // =========================================================================
   Widget _buildCategoriesTab() {
     final categoriesAsync = ref.watch(categoriesProvider);

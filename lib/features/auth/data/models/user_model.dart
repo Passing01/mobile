@@ -52,7 +52,7 @@ class UserModel extends Equatable {
       id: json['id'] as int,
       nom: json['nom'] as String,
       email: json['email'] as String?,
-      telephone: json['telephone'] as String,
+      telephone: (json['telephone'] as String?) ?? '',
       role: (json['role'] as String?) ?? 'user',
       languePreferee: (json['langue_preferee'] as String?) ?? 'mos',
       isActive: (json['is_active'] as bool?) ?? true,

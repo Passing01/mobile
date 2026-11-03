@@ -3,6 +3,7 @@ import 'package:qvgestion_mobile/core/network/api_endpoints.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/admin/data/models/admin_dashboard_stats_model.dart';
 import 'package:qvgestion_mobile/features/admin/data/models/api_key_model.dart';
+import 'package:qvgestion_mobile/features/auth/data/models/user_model.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/road_feature_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 
@@ -239,6 +240,88 @@ class AdminRepository {
       return response.data as Map<String, dynamic>;
     } catch (e, stack) {
       AppLogger.e('Erreur lors du traçage de la nouvelle voie', e, stack);
+      rethrow;
+    }
+  }
+
+  // =========================================================================
+  // --- Gestion des Administrateurs, Modérateurs & Utilisateurs ---
+  // =========================================================================
+
+  /// Récupère la liste des utilisateurs / administrateurs avec filtres
+  Future<List<UserModel>> getUsers({
+    String? role,
+    String? search,
+    bool? isActive,
+    int skip = 0,
+    int limit = 50,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'skip': skip,
+        'limit': limit,
+      };
+      if (role != null) queryParams['role'] = role;
+      if (search != null && search.isNotEmpty) queryParams['search'] = search;
+      if (isActive != null) queryParams['is_active'] = isActive;
+
+      final response = await apiClient.get<dynamic>(
+        ApiEndpoints.adminUsers,
+        queryParameters: queryParams,
+      );
+      final list = response.data as List<dynamic>? ?? [];
+      return list
+          .map((item) => UserModel.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e, stack) {
+      AppLogger.e('Erreur lors de la récupération des utilisateurs', e, stack);
+      rethrow;
+    }
+  }
+
+  /// Récupère les détails d'un utilisateur / administrateur
+  Future<UserModel> getUserDetail(int id) async {
+    try {
+      final response = await apiClient.get<dynamic>(ApiEndpoints.adminUserDetail(id));
+      return UserModel.fromJson(response.data as Map<String, dynamic>);
+    } catch (e, stack) {
+      AppLogger.e('Erreur lors de la récupération de l\'utilisateur #$id', e, stack);
+      rethrow;
+    }
+  }
+
+  /// Active, désactive ou modifie le rôle d'un compte
+  Future<UserModel> updateUserStatus(
+    int id, {
+    bool? isActive,
+    String? role,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (isActive != null) queryParams['is_active'] = isActive;
+      if (role != null) queryParams['role'] = role;
+
+      final response = await apiClient.patch<dynamic>(
+        ApiEndpoints.adminUserStatus(id),
+        queryParameters: queryParams,
+      );
+      return UserModel.fromJson(response.data as Map<String, dynamic>);
+    } catch (e, stack) {
+      AppLogger.e('Erreur lors de la mise à jour du statut utilisateur #$id', e, stack);
+      rethrow;
+    }
+  }
+
+  /// Réinitialise le mot de passe d'un utilisateur par l'administrateur
+  Future<UserModel> resetUserPassword(int id, String newPassword) async {
+    try {
+      final response = await apiClient.post<dynamic>(
+        ApiEndpoints.adminUserResetPassword(id),
+        data: {'nouveau_mot_de_passe': newPassword},
+      );
+      return UserModel.fromJson(response.data as Map<String, dynamic>);
+    } catch (e, stack) {
+      AppLogger.e('Erreur lors de la réinitialisation du mot de passe #$id', e, stack);
       rethrow;
     }
   }

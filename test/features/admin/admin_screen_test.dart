@@ -5,6 +5,7 @@ import 'package:qvgestion_mobile/features/admin/data/models/admin_dashboard_stat
 import 'package:qvgestion_mobile/features/admin/data/models/api_key_model.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/providers/admin_providers.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/screens/admin_screen.dart';
+import 'package:qvgestion_mobile/features/auth/data/models/user_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
@@ -31,6 +32,15 @@ final sampleApiKey = ApiKeyModel(
   currentUsage: 120,
   isActive: true,
   createdAt: DateTime(2026, 1, 1),
+);
+
+const sampleAdminUser = UserModel(
+  id: 1,
+  nom: 'Directeur Ouedraogo',
+  email: 'admin@fasonav.bf',
+  telephone: '+22670112233',
+  role: 'admin',
+  isActive: true,
 );
 
 void main() {
@@ -74,6 +84,7 @@ void main() {
         categoriesProvider.overrideWith((ref) async => sampleCategories),
         adminRoadFeaturesProvider.overrideWith((ref) async => []),
         adminApiKeysProvider.overrideWith(FakeApiKeysNotifier.new),
+        adminUsersProvider.overrideWith(FakeAdminUsersNotifier.new),
       ],
       child: const MaterialApp(
         home: AdminScreen(),
@@ -81,7 +92,7 @@ void main() {
     );
   }
 
-  testWidgets('AdminScreen affiche les 6 onglets, KPIs, Éditeur Carto et API B2B',
+  testWidgets('AdminScreen affiche les 7 onglets, KPIs, Éditeur Carto, API B2B et Gestion Admins',
       (WidgetTester tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -99,6 +110,7 @@ void main() {
     expect(find.text('Modération'), findsOneWidget);
     expect(find.text('Éditeur Carto'), findsOneWidget);
     expect(find.text('API B2B'), findsOneWidget);
+    expect(find.text('Équipe & Admins'), findsOneWidget);
     expect(find.text('Catégories'), findsOneWidget);
     expect(find.text('Ancres Routières'), findsOneWidget);
 
@@ -134,6 +146,16 @@ void main() {
     expect(find.text('POST /api/v1/matrix'), findsOneWidget);
     expect(find.text('SAMU 15 - Urgences Médicales'), findsOneWidget);
     expect(find.text('Active'), findsOneWidget);
+
+    // Basculer vers l'onglet Équipe & Admins
+    await tester.tap(find.text('Équipe & Admins'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Directeur Ouedraogo'), findsOneWidget);
+    expect(find.text('ADMIN'), findsOneWidget);
+    expect(find.text('Actif'), findsOneWidget);
+    expect(find.text('MDP'), findsOneWidget);
+    expect(find.text('Détails'), findsOneWidget);
 
     // Basculer vers l'onglet Catégories
     await tester.tap(find.text('Catégories'));
@@ -173,3 +195,20 @@ class FakeApiKeysNotifier extends ApiKeysNotifier {
   @override
   Future<void> deleteKey(int id) async {}
 }
+
+class FakeAdminUsersNotifier extends AdminUsersNotifier {
+  @override
+  Future<List<UserModel>> build() async {
+    return [sampleAdminUser];
+  }
+
+  @override
+  Future<void> toggleStatus(int id, bool isActive) async {}
+
+  @override
+  Future<void> changeRole(int id, String newRole) async {}
+
+  @override
+  Future<void> resetPassword(int id, String newPassword) async {}
+}
+

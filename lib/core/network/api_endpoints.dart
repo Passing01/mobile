@@ -78,4 +78,10 @@ class ApiEndpoints {
   static const String adminRoadMaintenance = '/admin/road-maintenance';
   static const String adminRoadTrace = '/admin/roads/trace';
   static const String matrix = '/matrix';
+
+  // --- Gestion des Administrateurs & Utilisateurs ---
+  static const String adminUsers = '/users/';
+  static String adminUserDetail(int id) => '/users/$id';
+  static String adminUserStatus(int id) => '/users/$id/status';
+  static String adminUserResetPassword(int id) => '/users/$id/reset-password';
 }
