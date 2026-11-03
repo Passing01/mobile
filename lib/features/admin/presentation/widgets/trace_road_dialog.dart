@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/providers/admin_providers.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_map_point_picker_dialog.dart';
 
 /// Dialogue pour tracer une nouvelle voie / 6-mètres / piste (GrabMaps style FASO NAV)
 class TraceRoadDialog extends ConsumerStatefulWidget {
@@ -221,12 +223,50 @@ class _TraceRoadDialogState extends ConsumerState<TraceRoadDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              const Text(
-                'Point de Départ GPS :',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Point de Départ GPS :',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  TextButton.icon(
+                    key: const Key('trace_road_pick_start_map_button'),
+                    icon: const Icon(Icons.map_rounded, size: 14),
+                    label: const Text('Pointer sur carte 📍', style: TextStyle(fontSize: 11)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF4338CA),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () async {
+                      final curLat = double.tryParse(_startLatCtrl.text.trim()) ??
+                          widget.initialLat ??
+                          12.3680;
+                      final curLon = double.tryParse(_startLonCtrl.text.trim()) ??
+                          widget.initialLon ??
+                          -1.5270;
+                      final picked = await AdminMapPointPickerDialog.pickPoint(
+                        context,
+                        initialPoint: LatLng(curLat, curLon),
+                        title: 'Point de Départ de la Voie',
+                        subtitle: 'Touchez l\'intersection ou le début du tracé',
+                        confirmLabel: 'Définir le point de départ',
+                        confirmIcon: Icons.play_arrow_rounded,
+                        themeColor: const Color(0xFF4338CA),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _startLatCtrl.text = picked.latitude.toStringAsFixed(6);
+                          _startLonCtrl.text = picked.longitude.toStringAsFixed(6);
+                        });
+                      }
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Row(
                 children: [
                   Expanded(
@@ -246,12 +286,50 @@ class _TraceRoadDialogState extends ConsumerState<TraceRoadDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Point d\'Arrivée GPS :',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Point d\'Arrivée GPS :',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  TextButton.icon(
+                    key: const Key('trace_road_pick_end_map_button'),
+                    icon: const Icon(Icons.map_rounded, size: 14),
+                    label: const Text('Pointer sur carte 📍', style: TextStyle(fontSize: 11)),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF059669),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () async {
+                      final curLat = double.tryParse(_endLatCtrl.text.trim()) ??
+                          widget.initialLat ??
+                          12.3705;
+                      final curLon = double.tryParse(_endLonCtrl.text.trim()) ??
+                          widget.initialLon ??
+                          -1.5252;
+                      final picked = await AdminMapPointPickerDialog.pickPoint(
+                        context,
+                        initialPoint: LatLng(curLat, curLon),
+                        title: 'Point d\'Arrivée de la Voie',
+                        subtitle: 'Touchez le point de fin du tracé',
+                        confirmLabel: 'Définir le point d\'arrivée',
+                        confirmIcon: Icons.flag_rounded,
+                        themeColor: const Color(0xFF059669),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _endLatCtrl.text = picked.latitude.toStringAsFixed(6);
+                          _endLonCtrl.text = picked.longitude.toStringAsFixed(6);
+                        });
+                      }
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Row(
                 children: [
                   Expanded(

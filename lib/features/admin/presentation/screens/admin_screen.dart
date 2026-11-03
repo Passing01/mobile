@@ -6,6 +6,7 @@ import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/features/admin/data/models/api_key_model.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/providers/admin_providers.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/add_traffic_signal_dialog.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_map_point_picker_dialog.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_reset_password_dialog.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_user_detail_dialog.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/broadcast_geo_alert_modal.dart';
@@ -420,7 +421,38 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Text('Erreur : $e', style: const TextStyle(color: Colors.red)),
+          error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 48, color: Color(0xFFEF4444)),
+              const SizedBox(height: 12),
+              const Text(
+                'Impossible de charger les ancres routières',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$e',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => ref.invalidate(adminRoadFeaturesProvider),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Réessayer'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
         ),
 
         const SizedBox(height: 24),
@@ -491,7 +523,38 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
             );
           },
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Text('Erreur : $e', style: const TextStyle(color: Colors.red)),
+          error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 48, color: Color(0xFFEF4444)),
+              const SizedBox(height: 12),
+              const Text(
+                'Impossible de charger les ancres routières',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$e',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => ref.invalidate(adminRoadFeaturesProvider),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Réessayer'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
         ),
       ],
     );
@@ -534,6 +597,117 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
               Text(
                 'Créez et mettez à jour la voirie locale, les feux tricolores et les coupures en temps réel sans attendre de mise à jour externe.',
                 style: TextStyle(fontSize: 12, color: Color(0xFFC7D2FE)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Carte d'accès direct au pointeur cartographique visuel
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.touch_app_rounded, color: AppColors.primary, size: 22),
+                  SizedBox(width: 8),
+                  Text(
+                    'Pointage Direct sur la Carte',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Pas besoin de saisir de coordonnées : touchez la carte pour positionner vos feux, travaux ou voies partout au Burkina Faso.',
+                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ActionChip(
+                    avatar: const Icon(Icons.traffic_rounded, size: 16, color: Color(0xFFD97706)),
+                    label: const Text('Pointer un Feu 📍', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    backgroundColor: const Color(0xFFFEF3C7),
+                    side: const BorderSide(color: Color(0xFFFDE68A)),
+                    onPressed: () async {
+                      final point = await AdminMapPointPickerDialog.pickPoint(
+                        context,
+                        title: 'Pointer l\'emplacement du Feu',
+                        subtitle: 'Touchez l\'intersection exacte sur la carte',
+                        confirmLabel: 'Placer le feu ici',
+                        confirmIcon: Icons.traffic_rounded,
+                        themeColor: const Color(0xFFD97706),
+                      );
+                      if (point != null && mounted) {
+                        AddTrafficSignalDialog.show(
+                          context,
+                          initialLat: point.latitude,
+                          initialLon: point.longitude,
+                        );
+                      }
+                    },
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.construction_rounded, size: 16, color: Color(0xFFDC2626)),
+                    label: const Text('Pointer des Travaux 📍', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    backgroundColor: const Color(0xFFFEE2E2),
+                    side: const BorderSide(color: Color(0xFFFECACA)),
+                    onPressed: () async {
+                      final point = await AdminMapPointPickerDialog.pickPoint(
+                        context,
+                        title: 'Pointer la Coupure / Travaux',
+                        subtitle: 'Touchez la voie à couper ou sécuriser',
+                        confirmLabel: 'Bloquer cette voie ici',
+                        confirmIcon: Icons.block_rounded,
+                        themeColor: const Color(0xFFDC2626),
+                      );
+                      if (point != null && mounted) {
+                        DeclareMaintenanceDialog.show(
+                          context,
+                          initialLat: point.latitude,
+                          initialLon: point.longitude,
+                        );
+                      }
+                    },
+                  ),
+                  ActionChip(
+                    avatar: const Icon(Icons.add_road_rounded, size: 16, color: Color(0xFF4338CA)),
+                    label: const Text('Tracer une Voie 📍', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    backgroundColor: const Color(0xFFE0E7FF),
+                    side: const BorderSide(color: Color(0xFFC7D2FE)),
+                    onPressed: () async {
+                      final point = await AdminMapPointPickerDialog.pickPoint(
+                        context,
+                        title: 'Point de Départ de la Voie',
+                        subtitle: 'Touchez le début du 6-mètres ou de la piste',
+                        confirmLabel: 'Définir le début du tracé',
+                        confirmIcon: Icons.play_arrow_rounded,
+                        themeColor: const Color(0xFF4338CA),
+                      );
+                      if (point != null && mounted) {
+                        TraceRoadDialog.show(
+                          context,
+                          initialLat: point.latitude,
+                          initialLon: point.longitude,
+                        );
+                      }
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -810,7 +984,38 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
               child: CircularProgressIndicator(),
             ),
           ),
-          error: (e, _) => Text('Erreur : $e', style: const TextStyle(color: Colors.red)),
+          error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 48, color: Color(0xFFEF4444)),
+              const SizedBox(height: 12),
+              const Text(
+                'Impossible de charger les ancres routières',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$e',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => ref.invalidate(adminRoadFeaturesProvider),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Réessayer'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
         ),
       ],
     );
@@ -1361,7 +1566,38 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Text('Erreur : $e', style: const TextStyle(color: Colors.red)),
+      error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 48, color: Color(0xFFEF4444)),
+              const SizedBox(height: 12),
+              const Text(
+                'Impossible de charger les ancres routières',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$e',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => ref.invalidate(adminRoadFeaturesProvider),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Réessayer'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1492,7 +1728,38 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
         );
       },
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Text('Erreur : $e', style: const TextStyle(color: Colors.red)),
+      error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 48, color: Color(0xFFEF4444)),
+              const SizedBox(height: 12),
+              const Text(
+                'Impossible de charger les ancres routières',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '$e',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () => ref.invalidate(adminRoadFeaturesProvider),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Réessayer'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

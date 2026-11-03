@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/providers/admin_providers.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_reset_password_dialog.dart';

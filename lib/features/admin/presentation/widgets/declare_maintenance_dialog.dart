@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/providers/admin_providers.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_map_point_picker_dialog.dart';
 import 'package:qvgestion_mobile/features/reports/presentation/providers/reports_providers.dart';
 
 /// Dialogue pour déclarer des travaux de voirie / coupure avec impact direct sur le moteur de guidage
@@ -189,6 +191,49 @@ class _DeclareMaintenanceDialogState extends ConsumerState<DeclareMaintenanceDia
                 onChanged: (val) {
                   if (val != null) setState(() => _durationHours = val);
                 },
+              ),
+              const SizedBox(height: 14),
+              // Bouton interactif de pointage cartographique
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  key: const Key('declare_maintenance_pick_map_button'),
+                  icon: const Icon(Icons.map_rounded, size: 18),
+                  label: const Text('Pointer la coupure sur la Carte 📍'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFEE2E2),
+                    foregroundColor: const Color(0xFFDC2626),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: const BorderSide(color: Color(0xFFFECACA)),
+                    ),
+                  ),
+                  onPressed: () async {
+                    final curLat = double.tryParse(_latCtrl.text.trim()) ??
+                        widget.initialLat ??
+                        12.3680;
+                    final curLon = double.tryParse(_lonCtrl.text.trim()) ??
+                        widget.initialLon ??
+                        -1.5270;
+                    final picked = await AdminMapPointPickerDialog.pickPoint(
+                      context,
+                      initialPoint: LatLng(curLat, curLon),
+                      title: 'Point de blocage / Travaux',
+                      subtitle: 'Touchez la rue ou le tronçon à bloquer',
+                      confirmLabel: 'Bloquer cette voie ici',
+                      confirmIcon: Icons.block_rounded,
+                      themeColor: const Color(0xFFDC2626),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _latCtrl.text = picked.latitude.toStringAsFixed(6);
+                        _lonCtrl.text = picked.longitude.toStringAsFixed(6);
+                      });
+                    }
+                  },
+                ),
               ),
               const SizedBox(height: 12),
               Row(

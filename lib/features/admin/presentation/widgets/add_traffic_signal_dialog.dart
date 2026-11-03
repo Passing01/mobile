@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/widgets/feedback/app_snackbar.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/providers/admin_providers.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_map_point_picker_dialog.dart';
 
 /// Dialogue pour déposer un feu tricolore opérationnel pour le guidage vocal (Narrateur v2)
 class AddTrafficSignalDialog extends ConsumerStatefulWidget {
@@ -180,6 +182,49 @@ class _AddTrafficSignalDialogState extends ConsumerState<AddTrafficSignalDialog>
                   labelText: 'Axe / Direction prioritaire',
                   hintText: 'ex: Vers Ouaga 2000',
                   prefixIcon: Icon(Icons.explore_rounded, size: 20),
+                ),
+              ),
+              const SizedBox(height: 14),
+              // Bouton interactif de pointage cartographique
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  key: const Key('add_traffic_signal_pick_map_button'),
+                  icon: const Icon(Icons.map_rounded, size: 18),
+                  label: const Text('Pointer sur la Carte Directe 📍'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFEF3C7),
+                    foregroundColor: const Color(0xFFB45309),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      side: const BorderSide(color: Color(0xFFFDE68A)),
+                    ),
+                  ),
+                  onPressed: () async {
+                    final curLat = double.tryParse(_latCtrl.text.trim()) ??
+                        widget.initialLat ??
+                        12.3680;
+                    final curLon = double.tryParse(_lonCtrl.text.trim()) ??
+                        widget.initialLon ??
+                        -1.5270;
+                    final picked = await AdminMapPointPickerDialog.pickPoint(
+                      context,
+                      initialPoint: LatLng(curLat, curLon),
+                      title: 'Emplacement du Feu Tricolore',
+                      subtitle: 'Touchez l\'intersection ou le carrefour exact',
+                      confirmLabel: 'Placer le feu ici',
+                      confirmIcon: Icons.traffic_rounded,
+                      themeColor: const Color(0xFFD97706),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _latCtrl.text = picked.latitude.toStringAsFixed(6);
+                        _lonCtrl.text = picked.longitude.toStringAsFixed(6);
+                      });
+                    }
+                  },
                 ),
               ),
               const SizedBox(height: 12),
