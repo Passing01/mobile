@@ -33,6 +33,25 @@ class PlacesRepository {
     return earthRadius * c;
   }
 
+  /// Nettoie les anciennes clés volumineuses dans SharedPreferences pour éviter tout dépassement mémoire (OOM)
+  static Future<void> cleanupBloatedPrefs(SharedPreferences prefs) async {
+    try {
+      final keys = prefs.getKeys().toList();
+      for (final k in keys) {
+        if (k.startsWith('geojson_')) {
+          await prefs.remove(k);
+        } else if (k.startsWith(_categoryCachePrefix)) {
+          final val = prefs.getString(k);
+          if (val != null && val.length > 120000) {
+            await prefs.remove(k);
+          }
+        }
+      }
+    } catch (e) {
+      AppLogger.w('Nettoyage cache SharedPreferences: $e');
+    }
+  }
+
   Future<void> _savePlacesToCache(List<PlaceModel> places) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -49,8 +68,11 @@ class PlacesRepository {
       for (final p in places) {
         existingPlaces[p.id] = p;
       }
-      final toSave =
-          existingPlaces.values.map((p) => jsonEncode(p.toJson())).toList();
+      final allValues = existingPlaces.values.toList();
+      final capped = allValues.length > 100
+          ? allValues.sublist(allValues.length - 100)
+          : allValues;
+      final toSave = capped.map((p) => jsonEncode(p.toJson())).toList();
       await prefs.setStringList(_placesCacheKey, toSave);
     } catch (e) {
       AppLogger.w('Impossible d\'écrire les lieux dans le cache: $e');
@@ -129,7 +151,11 @@ class PlacesRepository {
           final id = item['id'] ?? item['properties']?['id'];
           if (id != null) existingFeatures[id] = item;
         }
-        await prefs.setString(key, jsonEncode(existingFeatures.values.toList()));
+        final allList = existingFeatures.values.toList();
+        final cappedList = allList.length > 60
+            ? allList.sublist(allList.length - 60)
+            : allList;
+        await prefs.setString(key, jsonEncode(cappedList));
       }
     } catch (e) {
       AppLogger.w('Erreur persistance cache catégories hors-ligne: $e');
@@ -210,7 +236,7 @@ class PlacesRepository {
       try {
         final res = await apiClient.get<dynamic>(
           ApiEndpoints.places,
-          queryParameters: {'categories': cat, 'limit': 1000},
+          queryParameters: {'categories': cat, 'limit': 60},
         );
         final data = res.data;
         if (data is Map && data['features'] is List) {
@@ -239,8 +265,6 @@ class PlacesRepository {
     double zoom = 14.0,
     int limit = 800,
   }) async {
-    final sortedCats = categories != null ? (List<String>.from(categories)..sort()) : <String>[];
-    final cacheKey = 'geojson_${sortedCats.isEmpty ? "all" : sortedCats.join("_")}_${zone ?? bbox ?? "${lat}_$lng"}';
     try {
       final queryParams = <String, dynamic>{
         'limit': limit,
@@ -265,14 +289,9 @@ class PlacesRepository {
       final data = response.data;
       if (data is Map && data['type'] == 'FeatureCollection') {
         final features = (data['features'] as List<dynamic>?) ?? [];
-        if (features.isNotEmpty) {
-          // Persistance locale en tâche de fond sans bloquer le rendu fluide de la carte
+        if (features.isNotEmpty && features.length <= 200) {
+          // Persistance locale légère sans bloquer le rendu fluide de la carte ni saturer SharedPreferences
           _persistFeaturesToCategoryCache(features);
-          SharedPreferences.getInstance().then((prefs) {
-            prefs.setString(cacheKey, jsonEncode(data));
-          }).catchError((Object e) {
-            AppLogger.w('Impossible de mettre en cache les lieux: $e');
-          });
         }
 
         // En mode test uniquement, fusionner avec les repères simulés

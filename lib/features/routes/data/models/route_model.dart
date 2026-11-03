@@ -281,8 +281,26 @@ class RouteModel extends Equatable {
       }
     }
 
+    final modeStr = ((json['mode'] as String?) ?? 'moto').toLowerCase().trim();
     final dist = ((json['distance_m'] ?? json['distance_meters'] ?? 0.0) as num).toDouble();
-    final dur = ((json['duration_s'] ?? json['duration_seconds'] ?? 0) as num).round();
+    final rawDur = ((json['duration_s'] ?? json['duration_seconds'] ?? 0) as num).round();
+    int dur = rawDur;
+    if (dist > 0) {
+      final impliedSpeedMps = dur > 0 ? dist / dur : 999.0;
+      if (modeStr == 'pied' || modeStr == 'pieton' || modeStr == 'pedestrian') {
+        if (impliedSpeedMps > 2.5) {
+          dur = (dist / 1.3333).round();
+        }
+      } else if (modeStr == 'velo' || modeStr == 'bicycle') {
+        if (impliedSpeedMps > 6.5 || impliedSpeedMps < 2.0) {
+          dur = (dist / 4.1667).round();
+        }
+      } else if ((modeStr == 'moto' || modeStr == 'motorcycle') && dist > 15000) {
+        if (impliedSpeedMps > 18.0) {
+          dur = (dist / 16.11).round();
+        }
+      }
+    }
     final durFormatted = (json['duration_formatted'] as String?) ??
         (dur < 60
             ? '${dur}s'

@@ -9,16 +9,23 @@ import 'package:qvgestion_mobile/core/theme/app_colors.dart';
 import 'package:qvgestion_mobile/core/theme/app_theme.dart';
 import 'package:qvgestion_mobile/core/theme/theme_provider.dart';
 import 'package:qvgestion_mobile/features/navigation/presentation/screens/main_tab_scaffold.dart';
+import 'package:qvgestion_mobile/features/places/data/repositories/places_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await EnvConfig.initializeAsync();
-  final prefs = await SharedPreferences.getInstance();
+  SharedPreferences? prefs;
+  try {
+    prefs = await SharedPreferences.getInstance();
+    await PlacesRepository.cleanupBloatedPrefs(prefs);
+  } catch (e) {
+    debugPrint('Avertissement initialisation SharedPreferences: $e');
+  }
 
   runApp(
     ProviderScope(
       overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
+        if (prefs != null) sharedPreferencesProvider.overrideWithValue(prefs),
       ],
       child: const QvGestionApp(),
     ),

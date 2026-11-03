@@ -62,3 +62,4 @@ void main() {
     expect(selected!.longitude, closeTo(-4.2974, 0.001));
   });
 }
+

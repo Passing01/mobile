@@ -152,8 +152,19 @@ final multiModeRoutesProvider =
         }
         if (m == 'pied' || route.mode == 'pied') {
           results['pedestrian'] = route;
-          results['bicycle'] = route;
-          results['velo'] = route;
+          final bikeSec = (route.distanceMeters / 4.1667).round();
+          final bikeFormatted = bikeSec < 60
+              ? '${bikeSec}s'
+              : bikeSec < 3600
+                  ? '${(bikeSec / 60).round()} min'
+                  : '${bikeSec ~/ 3600} h ${(bikeSec % 3600 ~/ 60)} min';
+          final bikeRoute = route.copyWith(
+            mode: 'velo',
+            durationSeconds: bikeSec,
+            durationFormatted: bikeFormatted,
+          );
+          results['bicycle'] = bikeRoute;
+          results['velo'] = bikeRoute;
         }
       } catch (e) {
         AppLogger.w('Échec calcul itinéraire comparatif mode $m: $e');

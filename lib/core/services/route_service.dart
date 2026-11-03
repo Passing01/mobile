@@ -39,6 +39,11 @@ class RouteService {
       case 'car':
       case 'taxi':
         return 'voiture';
+      case 'velo':
+      case 'vélo':
+      case 'bicycle':
+      case 'bike':
+        return 'velo';
       case 'pied':
       case 'pieton':
       case 'piéton':
