@@ -439,7 +439,15 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       final arriveText = lang == 'mos'
           ? 'Y taame y zĩigẽ !'
           : (lang == 'diu' ? 'I sera i yɔrɔ la !' : 'Vous êtes arrivé à destination !');
-      ref.read(voiceGuideProvider).say(arriveText, language: lang);
+      final arriveAudio = _guideSteps.isNotEmpty
+          ? _guideSteps.last.audioFor(dist: 0, language: lang)
+          : null;
+      ref.read(voiceGuideProvider).say(
+            arriveText,
+            audioSource: arriveAudio,
+            language: lang,
+            frenchFallbackText: 'Vous êtes arrivé à destination !',
+          );
       if (mounted) {
         AppSnackbar.showSuccess(
           context,
@@ -787,7 +795,15 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     final firstInstruction = route.maneuvers.isNotEmpty
         ? route.maneuvers.first.instruction
         : 'Suivre l\'itinéraire';
-    voiceGuide.say(firstInstruction, language: activeLang);
+    final startAudio = _guideSteps.isNotEmpty
+        ? _guideSteps.first.audioFor(dist: 0, language: activeLang)
+        : null;
+    voiceGuide.say(
+      firstInstruction,
+      audioSource: startAudio,
+      language: activeLang,
+      frenchFallbackText: route.maneuvers.isNotEmpty ? route.maneuvers.first.instruction : null,
+    );
 
     // Règle 8 : La simulation alimente exactement le même NavigationEngine que le GPS réel
     _processNavigationFix(firstPt, 5.0, 28.0, DateTime.now());

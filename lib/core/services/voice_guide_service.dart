@@ -68,15 +68,15 @@ class GuideStep {
     final t = type.toLowerCase();
     String file;
     if (t.contains('left')) {
-      file = 'turn_left.ogg';
+      file = 'turn_left.wav';
     } else if (t.contains('right')) {
-      file = 'turn_right.ogg';
+      file = 'turn_right.wav';
     } else if (t == 'arrive') {
-      file = 'arrive.ogg';
+      file = 'arrive.wav';
     } else if (t == 'depart') {
-      file = 'depart.ogg';
+      file = 'depart.wav';
     } else {
-      file = 'straight.ogg';
+      file = 'straight.wav';
     }
     return 'assets/audio/$lang/$file';
   }
@@ -482,6 +482,7 @@ class Announcer {
             steps[i].spoken(dist: t, language: language),
             audioSource: steps[i].audioFor(dist: t, language: language),
             language: language,
+            frenchFallbackText: steps[i].spoken(dist: t, language: 'fr'),
           );
         }
       }

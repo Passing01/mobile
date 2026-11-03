@@ -106,19 +106,19 @@ class MapLibreMapService implements MapService {
 
   double? _userLat;
   double? _userLon;
-  String? _transportMode = 'moto';
+  String? _transportMode;
   PlaceModel? _selectedPlace;
 
   String _modeIconFor(String? mode) {
     if (mode == null || mode.isEmpty || mode == 'default' || mode == 'none') {
-      return 'user-location-pin';
+      return '';
     }
     final m = mode.toLowerCase().trim();
     if (m == 'pied' || m == 'pedestrian' || m == 'walk') return 'mode-pied';
     if (m == 'voiture' || m == 'auto' || m == 'car') return 'mode-voiture';
     if (m == 'velo' || m == 'bicycle' || m == 'bike') return 'mode-velo';
     if (m == 'moto' || m == 'motorcycle') return 'mode-moto';
-    return 'user-location-pin';
+    return '';
   }
 
   String _modeLabelFor(String? mode) {
@@ -649,7 +649,7 @@ class MapLibreMapService implements MapService {
             [
               Expressions.coalesce,
               [Expressions.get, 'mode_icon'],
-              'mode-moto',
+              '',
             ],
             'mode-moto',
             'mode-moto',
@@ -659,7 +659,7 @@ class MapLibreMapService implements MapService {
             'mode-pied',
             'mode-velo',
             'mode-velo',
-            'mode-moto',
+            '',
           ],
           iconSize: 0.90,
           iconAnchor: 'bottom',

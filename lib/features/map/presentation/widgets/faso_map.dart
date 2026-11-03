@@ -15,7 +15,7 @@ class FasoMap extends StatefulWidget {
     this.onLongPress,
     this.onCameraIdle,
     this.attributionText = '© OpenStreetMap contributors',
-    this.showAttribution = true,
+    this.showAttribution = false,
     this.onAttributionTap,
     this.myLocationEnabled = false,
     this.myLocationTrackingMode = MyLocationTrackingMode.none,

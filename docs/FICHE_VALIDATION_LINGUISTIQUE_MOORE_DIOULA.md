@@ -43,3 +43,4 @@
 Conformément à la directive de l'Étape 10 :
 1. Si un fichier audio natif n'est pas encore signé et validé, l'application **n'utilise JAMAIS la synthèse vocale française pour lire du texte Mooré ou Dioula phonétiquement estropié**.
 2. Dans ce cas, la consigne vocale parlée est automatiquement énoncée **en français intelligible** (*« Dans 200 m, tournez à gauche »*), tandis que le texte reste affiché à l'écran dans la langue choisie par l'utilisateur.
+
