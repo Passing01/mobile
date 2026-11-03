@@ -151,13 +151,16 @@ class _SavePlaceModalState extends ConsumerState<SavePlaceModal> {
 
   void _shareLocation() {
     final name = _nameController.text.trim().isEmpty ? 'Ma position' : _nameController.text.trim();
+    final latStr = widget.latitude.toStringAsFixed(5);
+    final lonStr = widget.longitude.toStringAsFixed(5);
     final text = '📍 $name\n'
-        'Coordonnées : ${widget.latitude.toStringAsFixed(5)}, ${widget.longitude.toStringAsFixed(5)}\n'
-        'https://maps.google.com/?q=${widget.latitude},${widget.longitude}';
+        'Coordonnées GPS : $latStr, $lonStr\n'
+        'Partagé via FASO NAV • Carte et guidage du Burkina Faso\n'
+        'https://fasonav.bf/p?lat=$latStr&lon=$lonStr&name=${Uri.encodeComponent(name)}';
     SharePlus.instance.share(
       ShareParams(
         text: text,
-        subject: 'Partage de position : $name',
+        subject: 'FASO NAV : $name',
       ),
     );
   }

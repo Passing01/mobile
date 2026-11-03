@@ -113,3 +113,4 @@ En accord avec les exigences de l'Étape 11 et la feuille de route du projet :
    - **Phase 1 (Keyword Spotting léger)** : Entraîner un petit réseau TinyConv de 2 Mo pour reconnaître 15 mots-clés de navigation hors-ligne en Mooré et Dioula (*« Rood-Woko »*, *« Pharmacie »*, *« Gik-m »*, *« Dugu »*, *« Sira »*).
    - **Phase 2 (Route API Backend Dédiée)** : Déployer un conteneur d'inférence FastAPI `mms-faso-asr` hébergeant le modèle Meta MMS fine-tuné avec décodage n-grammes adapté à la toponymie locale.
    - **Phase 3 (Synthèse Mooré / Dioula pour guidage)** : Continuer de capitaliser sur les prompts audios pré-enregistrés haute fidélité (déjà validés en Étape 9C) qui offrent un rendu naturel 100% compréhensible par les usagers, sans la robotique d'un TTS expérimental.
+

@@ -409,14 +409,24 @@ class PlaceDetailSheet extends ConsumerWidget {
               key: const Key('btn_place_share'),
               tooltip: 'Partager le lieu',
               onPressed: () {
+                final latStr = place.latitude.toStringAsFixed(5);
+                final lonStr = place.longitude.toStringAsFixed(5);
+                final descPart = (place.description != null && place.description!.trim().isNotEmpty)
+                    ? '${place.description!.trim()}\n'
+                    : '';
+                final quartPart = (place.quartier != null && place.quartier!.trim().isNotEmpty)
+                    ? 'Quartier : ${place.quartier!.trim()}\n'
+                    : '';
                 final text = '📍 ${place.nom}\n'
-                    '${place.description != null ? "${place.description}\n" : ""}'
-                    'Coordonnées : ${place.latitude.toStringAsFixed(5)}, ${place.longitude.toStringAsFixed(5)}\n'
-                    'https://maps.google.com/?q=${place.latitude},${place.longitude}';
+                    '$descPart'
+                    '$quartPart'
+                    'Coordonnées GPS : $latStr, $lonStr\n'
+                    'Partagé via FASO NAV • Carte et guidage du Burkina Faso\n'
+                    'https://fasonav.bf/p?lat=$latStr&lon=$lonStr&name=${Uri.encodeComponent(place.nom)}';
                 SharePlus.instance.share(
                   ShareParams(
                     text: text,
-                    subject: 'Partage de position : ${place.nom}',
+                    subject: 'FASO NAV : ${place.nom}',
                   ),
                 );
               },
