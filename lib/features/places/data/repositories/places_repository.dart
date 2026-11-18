@@ -434,20 +434,23 @@ class PlacesRepository {
       }
       return fetched;
     } catch (e, st) {
-      AppErrorReporter.reportError(
-        'Erreur de récupération des lieux proches',
-        error: e,
-        stackTrace: st,
-        tag: 'PlacesAPI',
-      );
-      // En mode hors-ligne, récupérer le cache sauvegardé et fusionner avec le catalogue si mode test
+      // En mode hors-ligne, récupérer le cache sauvegardé + les catégories pré-téléchargées
       final cached = await _getCachedPlaces();
+      final offlineCatFeatures = await _getOfflineFeaturesForCategories(
+        slug != null && slug.isNotEmpty ? [slug] : null,
+      );
       final allMap = <int, PlaceModel>{};
 
       if (AppConfig.testMode) {
         for (final p in defaultOuagaIconicPlaces) {
           allMap[p.id] = p;
         }
+      }
+      for (final f in offlineCatFeatures) {
+        try {
+          final p = PlaceModel.fromGeoJsonFeature(f);
+          allMap[p.id] = p;
+        } catch (_) {}
       }
       for (final p in cached) {
         allMap[p.id] = p;
@@ -476,6 +479,19 @@ class PlacesRepository {
 
       results.sort((a, b) =>
           (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0));
+
+      if (results.isNotEmpty) {
+        AppLogger.i(
+          'Mode hors-ligne actif pour les lieux proches (${results.length} lieux chargés du cache local)',
+        );
+      } else {
+        AppErrorReporter.reportError(
+          'Erreur de récupération des lieux proches',
+          error: e,
+          stackTrace: st,
+          tag: 'PlacesAPI',
+        );
+      }
       return results;
     }
   }
@@ -549,13 +565,20 @@ class PlacesRepository {
       }
       return _searchOfflineFallback(q, currentLat, currentLon);
     } catch (e, st) {
-      AppErrorReporter.reportError(
-        'Erreur recherche universelle de lieux',
-        error: e,
-        stackTrace: st,
-        tag: 'PlacesAPI',
-      );
-      return _searchOfflineFallback(q, currentLat, currentLon);
+      final fallback = await _searchOfflineFallback(q, currentLat, currentLon);
+      if (fallback.places.isNotEmpty) {
+        AppLogger.i(
+          'Mode hors-ligne actif pour la recherche "$q" (${fallback.places.length} lieux trouvés localement)',
+        );
+      } else {
+        AppErrorReporter.reportError(
+          'Erreur recherche universelle de lieux',
+          error: e,
+          stackTrace: st,
+          tag: 'PlacesAPI',
+        );
+      }
+      return fallback;
     }
   }
 
@@ -565,12 +588,19 @@ class PlacesRepository {
     double? currentLon,
   ) async {
     final cached = await _getCachedPlaces();
+    final offlineCatFeatures = await _getOfflineFeaturesForCategories(null);
     final allMap = <int, PlaceModel>{};
 
     if (AppConfig.testMode) {
       for (final p in defaultOuagaIconicPlaces) {
         allMap[p.id] = p;
       }
+    }
+    for (final f in offlineCatFeatures) {
+      try {
+        final p = PlaceModel.fromGeoJsonFeature(f);
+        allMap[p.id] = p;
+      } catch (_) {}
     }
     for (final p in cached) {
       allMap[p.id] = p;
