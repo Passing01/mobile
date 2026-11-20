@@ -9,6 +9,7 @@ import 'package:qvgestion_mobile/features/guidance/data/models/enriched_maneuver
 import 'package:qvgestion_mobile/features/guidance/data/models/enriched_route_model.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/landmark_model.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/narrator_v2.dart';
+import 'package:qvgestion_mobile/features/guidance/data/models/radar_scene_model.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 
 /// Repository pour interagir avec le moteur de consignes locales et guidage vocal FASO NAV
@@ -228,6 +229,51 @@ class GuidanceRepository {
   /// Récupère l'URL complète du flux audio WAV pour une consigne donnée
   String getAudioUrl(String soundId) {
     return '${EnvConfig.apiBaseUrl}/guidance/audio/$soundId.wav';
+  }
+
+  /// Récupère le GeoJSON des monuments et échangeurs 3D du Burkina Faso
+  /// avec repli local immédiat si le serveur est injoignable.
+  Future<Map<String, dynamic>> getMonuments3dGeoJson() async {
+    try {
+      final response = await apiClient.get<dynamic>(ApiEndpoints.guidanceMonuments3d);
+      if (response.data is Map<String, dynamic>) {
+        final data = response.data as Map<String, dynamic>;
+        if ((data['features'] as List?)?.isNotEmpty == true) {
+          return data;
+        }
+      }
+    } catch (e) {
+      AppLogger.d('Monuments 3D distants indisponibles ($e), utilisation du catalogue local');
+    }
+    return RadarSceneModel.buildFallbackMonumentsGeoJson();
+  }
+
+  /// Récupère la scène Radar Live (monuments, feux, ralentisseurs, trafic) autour de [lat], [lon].
+  Future<RadarSceneModel> getRadarScene({
+    required double lat,
+    required double lon,
+    double radiusM = 600.0,
+  }) async {
+    try {
+      final response = await apiClient.get<dynamic>(
+        ApiEndpoints.guidanceRadarScene,
+        queryParameters: {
+          'lat': lat,
+          'lon': lon,
+          'radius_m': radiusM,
+        },
+      );
+      if (response.data is Map<String, dynamic>) {
+        return RadarSceneModel.fromJson(response.data as Map<String, dynamic>);
+      }
+    } catch (e) {
+      AppLogger.d('Scène Radar distante indisponible ($e), repli sur repères locaux');
+    }
+    return RadarSceneModel(
+      centerLat: lat,
+      centerLon: lon,
+      radiusM: radiusM,
+    );
   }
 }
 

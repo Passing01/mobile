@@ -9,6 +9,7 @@ class MapTheme {
     required this.label,
     required this.halo,
     required this.isDark,
+    this.is3D = false,
   });
 
   /// Couleur principale du tracé de navigation
@@ -25,6 +26,9 @@ class MapTheme {
 
   /// Mode sombre actif
   final bool isDark;
+
+  /// Mode carte 3D immersif actif
+  final bool is3D;
 
   /// Thème Mode Clair (FASO NAV Light)
   static const light = MapTheme(
@@ -51,6 +55,16 @@ class MapTheme {
     label: '#FFFFFF',
     halo: '#000000',
     isDark: true,
+  );
+
+  /// Thème Mode Faso 3D Immersif (Bâtiments extrudés, monuments, échangeurs)
+  static const faso3d = MapTheme(
+    route: '#0066FF', // Bleu électrique lumineux sur relief 3D
+    routeCasing: '#FFFFFF',
+    label: '#1E293B',
+    halo: '#FFFFFF',
+    isDark: false,
+    is3D: true,
   );
 
   static MapTheme fromBrightness(Brightness brightness) {

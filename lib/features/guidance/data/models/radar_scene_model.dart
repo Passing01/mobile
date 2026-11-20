@@ -1,0 +1,255 @@
+import 'dart:math' as math;
+
+/// Monument ou échangeur 3D géolocalisé pour le rendu Faso 3D et la Vue Radar Live
+class RadarMonumentItem {
+  final String id;
+  final String name;
+  final String city;
+  final String kind;
+  final double latitude;
+  final double longitude;
+  final double heightM;
+  final double baseM;
+  final String color;
+  final double distanceM;
+  final double bearingDeg;
+
+  const RadarMonumentItem({
+    required this.id,
+    required this.name,
+    required this.city,
+    required this.kind,
+    required this.latitude,
+    required this.longitude,
+    required this.heightM,
+    this.baseM = 0.0,
+    this.color = '#D97706',
+    required this.distanceM,
+    required this.bearingDeg,
+  });
+
+  factory RadarMonumentItem.fromJson(Map<String, dynamic> json) {
+    return RadarMonumentItem(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? 'Monument',
+      city: json['city']?.toString() ?? 'Ouagadougou',
+      kind: json['kind']?.toString() ?? 'monument',
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      heightM: (json['height_m'] as num?)?.toDouble() ?? 20.0,
+      baseM: (json['base_m'] as num?)?.toDouble() ?? 0.0,
+      color: json['color']?.toString() ?? '#D97706',
+      distanceM: (json['distance_m'] as num?)?.toDouble() ?? 0.0,
+      bearingDeg: (json['bearing_deg'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+/// Élément routier détecté par le radar (feu tricolore, échangeur, ralentisseur, rond-point...)
+class RadarRoadFeatureItem {
+  final String id;
+  final String kind;
+  final String name;
+  final double latitude;
+  final double longitude;
+  final int importance;
+  final double distanceM;
+  final double bearingDeg;
+
+  const RadarRoadFeatureItem({
+    required this.id,
+    required this.kind,
+    required this.name,
+    required this.latitude,
+    required this.longitude,
+    this.importance = 3,
+    required this.distanceM,
+    required this.bearingDeg,
+  });
+
+  factory RadarRoadFeatureItem.fromJson(Map<String, dynamic> json) {
+    return RadarRoadFeatureItem(
+      id: json['id']?.toString() ?? '',
+      kind: json['kind']?.toString() ?? 'traffic_signal',
+      name: json['name']?.toString() ?? '',
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      importance: (json['importance'] as num?)?.toInt() ?? 3,
+      distanceM: (json['distance_m'] as num?)?.toDouble() ?? 0.0,
+      bearingDeg: (json['bearing_deg'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+/// Repère local multilingue visible sur le radar
+class RadarLandmarkItem {
+  final String id;
+  final String name;
+  final String? nameMoore;
+  final String? nameDioula;
+  final String kind;
+  final double latitude;
+  final double longitude;
+  final int importance;
+  final double distanceM;
+  final double bearingDeg;
+
+  const RadarLandmarkItem({
+    required this.id,
+    required this.name,
+    this.nameMoore,
+    this.nameDioula,
+    required this.kind,
+    required this.latitude,
+    required this.longitude,
+    this.importance = 3,
+    required this.distanceM,
+    required this.bearingDeg,
+  });
+
+  factory RadarLandmarkItem.fromJson(Map<String, dynamic> json) {
+    return RadarLandmarkItem(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      nameMoore: json['name_moore']?.toString(),
+      nameDioula: json['name_dioula']?.toString(),
+      kind: json['kind']?.toString() ?? 'monument',
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      importance: (json['importance'] as num?)?.toInt() ?? 3,
+      distanceM: (json['distance_m'] as num?)?.toDouble() ?? 0.0,
+      bearingDeg: (json['bearing_deg'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+/// Segment de trafic temps réel capté par le radar
+class RadarTrafficItem {
+  final String segmentId;
+  final double latitude;
+  final double longitude;
+  final double averageSpeedKmh;
+  final String congestionLevel;
+  final int samplesCount;
+  final double distanceM;
+  final double bearingDeg;
+
+  const RadarTrafficItem({
+    required this.segmentId,
+    required this.latitude,
+    required this.longitude,
+    required this.averageSpeedKmh,
+    required this.congestionLevel,
+    required this.samplesCount,
+    required this.distanceM,
+    required this.bearingDeg,
+  });
+
+  factory RadarTrafficItem.fromJson(Map<String, dynamic> json) {
+    return RadarTrafficItem(
+      segmentId: json['segment_id']?.toString() ?? '',
+      latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (json['longitude'] as num?)?.toDouble() ?? 0.0,
+      averageSpeedKmh: (json['average_speed_kmh'] as num?)?.toDouble() ?? 30.0,
+      congestionLevel: json['congestion_level']?.toString() ?? 'fluid',
+      samplesCount: (json['samples_count'] as num?)?.toInt() ?? 1,
+      distanceM: (json['distance_m'] as num?)?.toDouble() ?? 0.0,
+      bearingDeg: (json['bearing_deg'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+/// Scène agrégée autour du conducteur pour la Vue Radar Live et la carte Faso 3D
+class RadarSceneModel {
+  final double centerLat;
+  final double centerLon;
+  final double radiusM;
+  final List<RadarMonumentItem> monuments3d;
+  final List<RadarRoadFeatureItem> roadFeatures;
+  final List<RadarLandmarkItem> landmarks;
+  final List<RadarTrafficItem> trafficSegments;
+
+  const RadarSceneModel({
+    required this.centerLat,
+    required this.centerLon,
+    required this.radiusM,
+    this.monuments3d = const [],
+    this.roadFeatures = const [],
+    this.landmarks = const [],
+    this.trafficSegments = const [],
+  });
+
+  factory RadarSceneModel.fromJson(Map<String, dynamic> json) {
+    final center = json['center'] as Map<String, dynamic>? ?? const {};
+    return RadarSceneModel(
+      centerLat: (center['latitude'] as num?)?.toDouble() ?? 12.3685,
+      centerLon: (center['longitude'] as num?)?.toDouble() ?? -1.5271,
+      radiusM: (json['radius_m'] as num?)?.toDouble() ?? 600.0,
+      monuments3d: (json['monuments_3d'] as List<dynamic>? ?? const [])
+          .map((e) => RadarMonumentItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      roadFeatures: (json['road_features'] as List<dynamic>? ?? const [])
+          .map((e) => RadarRoadFeatureItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      landmarks: (json['landmarks'] as List<dynamic>? ?? const [])
+          .map((e) => RadarLandmarkItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      trafficSegments: (json['traffic_segments'] as List<dynamic>? ?? const [])
+          .map((e) => RadarTrafficItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  /// Construit un GeoJSON local de repli pour afficher les monuments & échangeurs 3D
+  /// du Burkina Faso même sans connexion réseau.
+  static Map<String, dynamic> buildFallbackMonumentsGeoJson() {
+    const specs = <Map<String, dynamic>>[
+      {'id': 'ouaga_monument_martyrs', 'name': 'Monument des Martyrs', 'lat': 12.3160, 'lon': -1.5030, 'h': 58.0, 'base': 0.0, 'r': 28.0, 'color': '#D97706'},
+      {'id': 'ouaga_place_nation', 'name': 'Place de la Nation', 'lat': 12.3680, 'lon': -1.5270, 'h': 24.0, 'base': 0.0, 'r': 32.0, 'color': '#C2410C'},
+      {'id': 'ouaga_memorial_sankara', 'name': 'Mémorial Thomas Sankara', 'lat': 12.3672, 'lon': -1.5056, 'h': 36.0, 'base': 0.0, 'r': 24.0, 'color': '#B45309'},
+      {'id': 'ouaga_echangeur_nord', 'name': 'Échangeur du Nord', 'lat': 12.3924, 'lon': -1.5194, 'h': 16.0, 'base': 7.0, 'r': 55.0, 'color': '#64748B'},
+      {'id': 'ouaga_echangeur_est', 'name': 'Échangeur de l\'Est', 'lat': 12.3612, 'lon': -1.4846, 'h': 15.0, 'base': 6.5, 'r': 50.0, 'color': '#64748B'},
+      {'id': 'ouaga_echangeur_ouaga2000', 'name': 'Échangeur de Ouaga 2000', 'lat': 12.3238, 'lon': -1.5065, 'h': 15.5, 'base': 6.5, 'r': 48.0, 'color': '#64748B'},
+      {'id': 'ouaga_echangeur_ouest', 'name': 'Échangeur de l\'Ouest', 'lat': 12.3568, 'lon': -1.5646, 'h': 14.5, 'base': 6.0, 'r': 46.0, 'color': '#64748B'},
+      {'id': 'ouaga_grande_mosquee', 'name': 'Grande Mosquée de Ouagadougou', 'lat': 12.3712, 'lon': -1.5228, 'h': 32.0, 'base': 0.0, 'r': 26.0, 'color': '#059669'},
+      {'id': 'ouaga_rood_woko', 'name': 'Grand Marché Rood-Woko', 'lat': 12.3685, 'lon': -1.5222, 'h': 18.0, 'base': 0.0, 'r': 65.0, 'color': '#0D9488'},
+      {'id': 'bobo_vieille_mosquee', 'name': 'Vieille Mosquée de Dioulassoba', 'lat': 11.1783, 'lon': -4.2932, 'h': 22.0, 'base': 0.0, 'r': 22.0, 'color': '#B45309'},
+    ];
+
+    final features = specs.map((s) {
+      final lat = s['lat'] as double;
+      final lon = s['lon'] as double;
+      final r = s['r'] as double;
+      final dLat = r / 111320.0;
+      final dLon = r / (111320.0 * math.max(0.2, math.cos(lat * math.pi / 180.0)));
+      final ring = <List<double>>[];
+      for (var i = 0; i < 12; i++) {
+        final a = 2.0 * math.pi * i / 12.0;
+        ring.add([lon + dLon * math.cos(a), lat + dLat * math.sin(a)]);
+      }
+      ring.add(ring.first);
+
+      return {
+        'type': 'Feature',
+        'id': s['id'],
+        'geometry': {
+          'type': 'Polygon',
+          'coordinates': [ring],
+        },
+        'properties': {
+          'id': s['id'],
+          'name': s['name'],
+          'height': s['h'],
+          'min_height': s['base'],
+          'color': s['color'],
+        },
+      };
+    }).toList();
+
+    return {
+      'type': 'FeatureCollection',
+      'features': features,
+    };
+  }
+}
+

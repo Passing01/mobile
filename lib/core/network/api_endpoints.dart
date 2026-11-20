@@ -30,6 +30,8 @@ class ApiEndpoints {
   static const String guidanceDictionary = '/guidance/dictionary';
   static const String guidanceLandmarks = '/guidance/landmarks';
   static const String guidanceEnrichRoute = '/guidance/enrich-route';
+  static const String guidanceMonuments3d = '/guidance/monuments-3d';
+  static const String guidanceRadarScene = '/guidance/radar-scene';
   static String guidanceAudio(String soundId) => '/guidance/audio/$soundId.wav';
 
   // --- Signalements d'Incidents ---

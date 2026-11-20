@@ -7,6 +7,7 @@ import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:qvgestion_mobile/core/theme/map_theme.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/core/utils/map_pin_generator.dart';
+import 'package:qvgestion_mobile/features/guidance/data/models/radar_scene_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 
@@ -51,6 +52,8 @@ abstract class MapService {
   Future<void> updateUserLocation(double lat, double lon);
   Future<void> setTransportMode(String? mode);
   Future<void> setSelectedPlace(PlaceModel? place);
+  Future<void> setMonuments3dGeoJson(Map<String, dynamic> geojson);
+  Future<void> setCameraTilt(double tilt);
   MapTheme get currentTheme;
   void dispose();
 }
@@ -83,6 +86,11 @@ class MapLibreMapService implements MapService {
   static const String routeSourceId = 'route';
   static const String routeCasingLayerId = 'route-casing';
   static const String routeLayerId = 'route-line';
+  static const String routeGlowLayerId = 'route-3d-glow';
+
+  static const String monuments3dSourceId = 'fasonav-monuments-3d-source';
+  static const String monuments3dExtrusionLayerId = 'fasonav-monuments-3d-extrusion';
+  static const String monuments3dLabelsLayerId = 'fasonav-monuments-3d-labels';
 
   static const String userLocationSourceId = 'fasonav-user-location-source';
   static const String userLocationAuraLayerId = 'fasonav-user-location-aura';
@@ -108,6 +116,7 @@ class MapLibreMapService implements MapService {
   double? _userLon;
   String? _transportMode;
   PlaceModel? _selectedPlace;
+  Map<String, dynamic>? _cachedMonumentsGeoJson;
 
   String _modeIconFor(String? mode) {
     if (mode == null || mode.isEmpty || mode == 'default' || mode == 'none') {
@@ -263,6 +272,37 @@ class MapLibreMapService implements MapService {
       } catch (e) {
         if (!e.toString().contains('already exists')) {
           AppLogger.w('Erreur addLineLayer $layerId: $e');
+        }
+      }
+    }
+  }
+
+  Future<void> _safeAddFillExtrusionLayer(
+    MapLibreMapController c,
+    Set<String> existingLayers,
+    String sourceId,
+    String layerId,
+    FillExtrusionLayerProperties properties, {
+    String? belowLayerId,
+    double? minzoom,
+    dynamic filter,
+    bool enableInteraction = false,
+  }) async {
+    if (!existingLayers.contains(layerId)) {
+      try {
+        await c.addFillExtrusionLayer(
+          sourceId,
+          layerId,
+          properties,
+          belowLayerId: belowLayerId,
+          minzoom: minzoom,
+          filter: filter,
+          enableInteraction: enableInteraction,
+        );
+        existingLayers.add(layerId);
+      } catch (e) {
+        if (!e.toString().contains('already exists')) {
+          AppLogger.w('Erreur addFillExtrusionLayer $layerId: $e');
         }
       }
     }
@@ -533,6 +573,82 @@ class MapLibreMapService implements MapService {
         enableInteraction: false,
       );
 
+      // 2.4 Mode Faso 3D : Lueur d'itinéraire + Monuments & Échangeurs extrudés en 3D
+      if (theme.is3D) {
+        await _safeAddLineLayer(
+          c,
+          existingLayers,
+          routeSourceId,
+          routeGlowLayerId,
+          const LineLayerProperties(
+            lineColor: '#38BDF8',
+            lineWidth: 16.0,
+            lineOpacity: 0.28,
+            lineBlur: 6.0,
+            lineJoin: 'round',
+            lineCap: 'round',
+          ),
+          filter: ['!=', ['get', 'is_walk'], true],
+          belowLayerId: routeCasingLayerId,
+          enableInteraction: false,
+        );
+
+        final monumentsData = _cachedMonumentsGeoJson ??
+            RadarSceneModel.buildFallbackMonumentsGeoJson();
+        await _safeAddGeoJsonSource(
+          c,
+          existingSources,
+          monuments3dSourceId,
+          monumentsData,
+        );
+        await _safeAddFillExtrusionLayer(
+          c,
+          existingLayers,
+          monuments3dSourceId,
+          monuments3dExtrusionLayerId,
+          const FillExtrusionLayerProperties(
+            fillExtrusionColor: [
+              Expressions.coalesce,
+              [Expressions.get, 'color'],
+              '#D97706',
+            ],
+            fillExtrusionHeight: [
+              Expressions.coalesce,
+              [Expressions.get, 'height'],
+              22.0,
+            ],
+            fillExtrusionBase: [
+              Expressions.coalesce,
+              [Expressions.get, 'min_height'],
+              0.0,
+            ],
+            fillExtrusionOpacity: 0.94,
+            fillExtrusionVerticalGradient: true,
+          ),
+          minzoom: 11.5,
+          belowLayerId: placesPointsLayerId,
+          enableInteraction: false,
+        );
+        await _safeAddSymbolLayer(
+          c,
+          existingLayers,
+          monuments3dSourceId,
+          monuments3dLabelsLayerId,
+          const SymbolLayerProperties(
+            textField: [Expressions.get, 'name'],
+            textFont: ['Noto Sans Bold'],
+            textSize: 11.5,
+            textColor: '#1E293B',
+            textHaloColor: '#FFFFFF',
+            textHaloWidth: 2.2,
+            textOffset: [0, -1.2],
+            textAllowOverlap: false,
+            textOptional: true,
+          ),
+          enableInteraction: false,
+        );
+      }
+
       // 3. Initialisation de la source et couches du lieu sélectionné (repère de destination / pin)
       final selectedGeoJson = _buildPointGeoJson(
         _selectedPlace?.latitude,
@@ -798,6 +914,30 @@ class MapLibreMapService implements MapService {
       await c.setGeoJsonSource(selectedPlaceSourceId, geojson);
     } catch (e) {
       AppLogger.d('Mise à jour lieu sélectionné: $e');
+    }
+  }
+
+  @override
+  Future<void> setMonuments3dGeoJson(Map<String, dynamic> geojson) async {
+    _cachedMonumentsGeoJson = geojson;
+    final c = _controller;
+    if (c == null || !_layersConfigured || !_currentTheme.is3D) return;
+
+    try {
+      await c.setGeoJsonSource(monuments3dSourceId, geojson);
+    } catch (e) {
+      AppLogger.d('Mise à jour source monuments 3D: $e');
+    }
+  }
+
+  @override
+  Future<void> setCameraTilt(double tilt) async {
+    final c = _controller;
+    if (c == null) return;
+    try {
+      await c.animateCamera(CameraUpdate.tiltTo(tilt.clamp(0.0, 65.0)));
+    } catch (e) {
+      AppLogger.d('Inclinaison caméra MapLibre: $e');
     }
   }
 

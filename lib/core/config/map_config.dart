@@ -7,12 +7,14 @@ class MapConfig {
   final String styleLight;
   final String styleDark;
   final String styleSatellite;
+  final String style3d;
   final String attribution;
 
   const MapConfig({
     required this.styleLight,
     required this.styleDark,
     required this.styleSatellite,
+    this.style3d = 'assets/map/styles/faso-3d.json',
     required this.attribution,
   });
 
@@ -28,12 +30,17 @@ class MapConfig {
       ? 'https://tiles.openfreemap.org/styles/liberty'
       : 'assets/map/styles/faso-satellite.json';
 
+  static String get defaultFaso3d => kIsWeb
+      ? 'https://tiles.openfreemap.org/styles/liberty'
+      : 'assets/map/styles/faso-3d.json';
+
   static const defaultAttribution = '© OpenStreetMap contributors, © Esri';
 
   factory MapConfig.defaults() => MapConfig(
         styleLight: defaultFasoLight,
         styleDark: defaultFasoDark,
         styleSatellite: defaultFasoSatellite,
+        style3d: defaultFaso3d,
         attribution: defaultAttribution,
       );
 
@@ -58,6 +65,7 @@ class MapConfig {
       styleLight: _sanitizeUrl(json['style_light'] as String?, defaultFasoLight),
       styleDark: _sanitizeUrl(json['style_dark'] as String?, defaultFasoDark),
       styleSatellite: _sanitizeUrl(json['style_satellite'] as String?, defaultFasoSatellite),
+      style3d: _sanitizeUrl(json['style_3d'] as String?, defaultFaso3d),
       attribution: json['attribution'] as String? ?? defaultAttribution,
     );
   }

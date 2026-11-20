@@ -46,10 +46,16 @@ import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
 import 'package:qvgestion_mobile/core/services/location_service.dart';
 import 'package:qvgestion_mobile/core/services/route_service.dart';
 import 'package:qvgestion_mobile/core/services/navigation_engine.dart';
+import 'package:qvgestion_mobile/core/services/smooth_motion_interpolator.dart';
+import 'package:qvgestion_mobile/features/guidance/data/models/radar_scene_model.dart';
+import 'package:qvgestion_mobile/features/map/presentation/widgets/faso_radar_hud_view.dart';
+import 'package:qvgestion_mobile/features/map/presentation/widgets/map_style_selector_sheet.dart';
 import 'package:qvgestion_mobile/features/places/data/models/category_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/places_list_bottom_sheet.dart';
 import 'package:qvgestion_mobile/core/widgets/sheets/poi_preview_card.dart';
 import 'package:qvgestion_mobile/features/places/presentation/widgets/place_detail_sheet.dart';
+import 'package:qvgestion_mobile/features/reports/data/models/report_model.dart';
+import 'package:qvgestion_mobile/features/reports/presentation/providers/reports_providers.dart';
 
 /// Écran principal Cartographie & Navigation QvGestion / FASO NAV
 /// Conforme à la maquette officielle avec carte OpenStreetMap fonctionnelle
@@ -97,6 +103,11 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   Announcer? _announcer;
   List<GuideStep> _guideSteps = [];
 
+  // Interpolation fluide 60 FPS & Scène Radar Live
+  final SmoothMotionInterpolator _motionInterpolator = SmoothMotionInterpolator();
+  Timer? _smoothMotionTimer;
+  DateTime _lastRadarSceneFetch = DateTime.fromMillisecondsSinceEpoch(0);
+
   static bool get _isUnderWidgetTest {
     final binding = WidgetsBinding.instance.runtimeType.toString();
     return binding.contains('Test') || const bool.fromEnvironment('FLUTTER_TEST_RUNNER');
@@ -128,6 +139,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   void dispose() {
     _gpsTrackingSub?.cancel();
     _simulationTimer?.cancel();
+    _smoothMotionTimer?.cancel();
     _placesDebounce?.cancel();
     _placesCancelToken?.cancel();
     super.dispose();
@@ -411,6 +423,16 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         _currentSpeedKmh = speedKmh;
       });
     }
+
+    // Alimentation de l'interpolateur 60 FPS et actualisation de la scène Radar Live
+    _motionInterpolator.pushTarget(
+      latitude: pos.latitude,
+      longitude: pos.longitude,
+      bearingDeg: _vehicleHeading,
+      speedKmh: speedKmh,
+    );
+    _ensureSmoothMotionTicker();
+    _maybeRefreshRadarScene(pos.latitude, pos.longitude);
 
     // Étape 9a · Annonceur pas-à-pas à 200m et 50m (fenêtre 40m, sans répétition)
     final lang = ref.read(guidanceLanguageProvider);
@@ -876,9 +898,57 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     return deg.isFinite ? deg : 0.0;
   }
 
+  void _ensureSmoothMotionTicker() {
+    if (_isUnderWidgetTest || _smoothMotionTimer != null) return;
+    _smoothMotionTimer = Timer.periodic(const Duration(milliseconds: 33), (_) {
+      if (!mounted) return;
+      if (ref.read(mapScreenStateProvider) != MapScreenState.activeNavigation) {
+        _smoothMotionTimer?.cancel();
+        _smoothMotionTimer = null;
+        return;
+      }
+      final sample = _motionInterpolator.sampleAt();
+      if (sample == null) return;
+      if (ref.read(isRadarViewEnabledProvider)) {
+        setState(() {
+          _vehiclePosition = LatLng(sample.latitude, sample.longitude);
+          _vehicleHeading = sample.bearingDeg;
+          _currentSpeedKmh = sample.speedKmh;
+        });
+      }
+      ref
+          .read(mapServiceProvider)
+          .updateUserLocation(sample.latitude, sample.longitude);
+    });
+  }
+
+  Future<void> _maybeRefreshRadarScene(double lat, double lon) async {
+    if (_isUnderWidgetTest) return;
+    final radarEnabled = ref.read(isRadarViewEnabledProvider);
+    final is3d = ref.read(is3dMapModeProvider);
+    if (!radarEnabled && !is3d) return;
+
+    final now = DateTime.now();
+    if (now.difference(_lastRadarSceneFetch) < const Duration(seconds: 4)) {
+      return;
+    }
+    _lastRadarSceneFetch = now;
+    try {
+      final scene = await ref
+          .read(guidanceRepositoryProvider)
+          .getRadarScene(lat: lat, lon: lon, radiusM: 600.0);
+      if (mounted) {
+        ref.read(activeRadarSceneProvider.notifier).update(scene);
+      }
+    } catch (_) {}
+  }
+
   void _stopNavigationSimulation() {
     _simulationTimer?.cancel();
     _simulationTimer = null;
+    _smoothMotionTimer?.cancel();
+    _smoothMotionTimer = null;
+    _motionInterpolator.reset();
     _announcer?.reset();
     _guideSteps.clear();
     ref.read(voiceGuideProvider).stop();
@@ -893,6 +963,10 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
 
   void _cancelRouteAndNavigation() {
     _stopNavigationSimulation();
+    _smoothMotionTimer?.cancel();
+    _smoothMotionTimer = null;
+    _motionInterpolator.reset();
+    ref.read(activeRadarSceneProvider.notifier).clear();
     _announcer?.reset();
     _guideSteps.clear();
     ref.read(voiceGuideProvider).stop();
@@ -1430,7 +1504,20 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       mapService.setTransportMode(next);
     });
 
+    // Synchronisation du mode 3D immersif : inclinaison caméra et chargement des monuments 3D
+    ref.listen<bool>(is3dMapModeProvider, (previous, next) async {
+      if (next) {
+        final monuments = await ref.read(monuments3dGeoJsonProvider.future);
+        await mapService.setMonuments3dGeoJson(monuments);
+        await mapService.setCameraTilt(52.0);
+      } else {
+        await mapService.setCameraTilt(0.0);
+      }
+    });
+
     final isSatellite = ref.watch(isSatelliteModeProvider);
+    final is3dMap = ref.watch(is3dMapModeProvider);
+    final isRadarView = ref.watch(isRadarViewEnabledProvider);
     final themeMode = ref.watch(themeModeProvider);
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
     final isDark =
@@ -1439,15 +1526,20 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             platformBrightness == Brightness.dark);
     final mapTheme = isSatellite
         ? MapTheme.satellite
-        : (isDark ? MapTheme.dark : MapTheme.light);
+        : (is3dMap
+              ? MapTheme.faso3d
+              : (isDark ? MapTheme.dark : MapTheme.light));
 
     final styleUrl = isSatellite
         ? (mapConfigAsync.value?.styleSatellite ??
               MapConfig.defaultFasoSatellite)
-        : (isDark
-              ? (mapConfigAsync.value?.styleDark ?? MapConfig.defaultFasoDark)
-              : (mapConfigAsync.value?.styleLight ??
-                    MapConfig.defaultFasoLight));
+        : (is3dMap
+              ? (mapConfigAsync.value?.style3d ?? MapConfig.defaultFaso3d)
+              : (isDark
+                    ? (mapConfigAsync.value?.styleDark ??
+                          MapConfig.defaultFasoDark)
+                    : (mapConfigAsync.value?.styleLight ??
+                          MapConfig.defaultFasoLight)));
     final attributionText = isSatellite
         ? '© OpenStreetMap contributors, © Esri'
         : (mapConfigAsync.value?.attribution ?? MapConfig.defaultAttribution);
@@ -1455,6 +1547,9 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     final placesState = ref.watch(placesStateProvider);
     final selectedCats = ref.watch(selectedCategoriesProvider);
     final gpsLost = ref.watch(gpsLostProvider);
+    final currentLoc = ref.watch(currentLocationProvider);
+    final radarScene = ref.watch(activeRadarSceneProvider);
+    final activeReports = ref.watch(activeReportsProvider).value ?? const <ReportModel>[];
 
     return Scaffold(
       body: Stack(
@@ -1503,6 +1598,12 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               if (route != null) {
                 await mapService.setRoute(route);
               }
+              if (is3dMap) {
+                await mapService.setMonuments3dGeoJson(
+                  RadarSceneModel.buildFallbackMonumentsGeoJson(),
+                );
+                await mapService.setCameraTilt(52.0);
+              }
               await _refreshPlaces();
             },
             onTap: (point, latLng) async {
@@ -1515,6 +1616,26 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               AboutCreditsModal.show(context);
             },
           ),
+
+          // 1.05 VUE RADAR LIVE (Cockpit Voiture Autonome 3D en navigation active)
+          if (screenState == MapScreenState.activeNavigation && isRadarView)
+            Positioned.fill(
+              child: FasoRadarHudView(
+                vehiclePosition: _vehiclePosition ??
+                    LatLng(currentLoc.lat, currentLoc.lon),
+                vehicleHeadingDeg: _vehicleHeading,
+                speedKmh: _currentSpeedKmh,
+                transportMode: ref.watch(selectedRouteModeProvider),
+                route: ref.watch(activeRouteProvider).value,
+                radarScene: radarScene,
+                activeReports: activeReports,
+                onSwitchToMap: () {
+                  ref
+                      .read(isRadarViewEnabledProvider.notifier)
+                      .setEnabled(false);
+                },
+              ),
+            ),
 
           // 1.1 BADGE FLOTTANT "Hors-ligne prêt" ou "Mode hors-ligne" dynamique
           if (screenState != MapScreenState.activeNavigation)
@@ -1578,7 +1699,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
           // 1.2 CONTRÔLES FLOTTANTS CARTE (Signalement, Centrage GPS - visible aussi en navigation Étape 8 Règle 6)
           Positioned(
             right: 16,
-            bottom: 200,
+            bottom: 190,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1612,6 +1733,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                 GestureDetector(
                   key: const Key('fab_toggle_satellite'),
                   onTap: () {
+                    ref.read(is3dMapModeProvider.notifier).set3d(false);
                     ref.read(isSatelliteModeProvider.notifier).toggle();
                   },
                   child: Container(
@@ -1644,6 +1766,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                 GestureDetector(
                   key: const Key('fab_toggle_theme'),
                   onTap: () {
+                    ref.read(is3dMapModeProvider.notifier).set3d(false);
                     ref.read(themeModeProvider.notifier).toggle();
                   },
                   child: Container(
@@ -2015,6 +2138,66 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
                   const WeatherTrafficTicker(),
                   const SizedBox(height: 8),
                   const FasoCategoryPills(),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8, right: 16),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: GestureDetector(
+                        key: const Key('fab_map_style_selector'),
+                        onTap: () => MapStyleSelectorSheet.show(context),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: is3dMap
+                                ? const Color(0xFFD97706)
+                                : Colors.white.withValues(alpha: 0.96),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(
+                              color: is3dMap
+                                  ? const Color(0xFFD97706)
+                                  : const Color(0xFFE5E7EB),
+                              width: 1.4,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.12),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                is3dMap
+                                    ? Icons.view_in_ar_rounded
+                                    : Icons.layers_rounded,
+                                color: is3dMap
+                                    ? Colors.white
+                                    : const Color(0xFF1E293B),
+                                size: 18,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                is3dMap ? 'Faso 3D' : 'Cartes • 3D',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: is3dMap
+                                      ? Colors.white
+                                      : const Color(0xFF1E293B),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
 
                   // Compteur dynamique et bouton Liste triée par distance (Tâche 10)
                   if (selectedCats.isNotEmpty && placesState.count > 0)
@@ -2522,6 +2705,20 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               tooltip: _isSimulationPaused ? 'Reprendre' : 'Pause',
             ),
           IconButton(
+            key: const Key('btn_toggle_radar_view'),
+            onPressed: () {
+              ref.read(isRadarViewEnabledProvider.notifier).toggle();
+            },
+            icon: Icon(
+              Icons.radar_rounded,
+              color: ref.watch(isRadarViewEnabledProvider)
+                  ? const Color(0xFF38BDF8)
+                  : Colors.white,
+              size: 24,
+            ),
+            tooltip: 'Vue Radar Live',
+          ),
+          IconButton(
             onPressed: () {
               ref
                   .read(voiceGuidanceServiceProvider)
@@ -2980,16 +3177,19 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             mainAxisSize: MainAxisSize.min,
             children: const [
               Icon(Icons.explore_rounded, color: AppColors.primary, size: 22),
-              SizedBox(width: 10),
-              Text(
-                'Explorer Ouaga & Environs',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1E293B),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Explorer Ouaga & Environs',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E293B),
+                  ),
                 ),
               ),
-              SizedBox(width: 8),
+              SizedBox(width: 6),
               Icon(
                 Icons.keyboard_arrow_up_rounded,
                 color: Color(0xFF64748B),

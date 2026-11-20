@@ -4,6 +4,7 @@ import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/enriched_maneuver_model.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/enriched_route_model.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/landmark_model.dart';
+import 'package:qvgestion_mobile/features/guidance/data/models/radar_scene_model.dart';
 import 'package:qvgestion_mobile/features/guidance/data/repositories/guidance_repository.dart';
 import 'package:qvgestion_mobile/features/routes/data/models/route_model.dart';
 
@@ -124,3 +125,28 @@ final currentEnrichedManeuverProvider = Provider<EnrichedManeuverModel?>((ref) {
 
   return enrichedRoute.enrichedManeuvers.first;
 });
+
+/// GeoJSON des monuments et échangeurs 3D du Burkina Faso
+final monuments3dGeoJsonProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  final repository = ref.watch(guidanceRepositoryProvider);
+  return repository.getMonuments3dGeoJson();
+});
+
+/// État courant de la scène Radar Live (actualisé pendant le guidage)
+class ActiveRadarSceneNotifier extends Notifier<RadarSceneModel?> {
+  @override
+  RadarSceneModel? build() => null;
+
+  void update(RadarSceneModel scene) {
+    state = scene;
+  }
+
+  void clear() {
+    state = null;
+  }
+}
+
+final activeRadarSceneProvider =
+    NotifierProvider<ActiveRadarSceneNotifier, RadarSceneModel?>(
+  ActiveRadarSceneNotifier.new,
+);
