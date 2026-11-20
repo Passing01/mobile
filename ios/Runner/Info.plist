@@ -70,5 +70,17 @@
 	<string>QV Gestion utilise votre position pour vous localiser sur la carte et afficher les lieux à proximité.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>QV Gestion utilise votre position pour vous guider lors de vos trajets.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>bf.faso.nav.location</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>geo</string>
+				<string>fasonav</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

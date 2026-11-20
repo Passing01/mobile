@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qvgestion_mobile/core/config/map_config.dart';
 import 'package:qvgestion_mobile/core/services/smooth_motion_interpolator.dart';
+import 'package:qvgestion_mobile/core/services/voice_guide_service.dart';
 import 'package:qvgestion_mobile/core/theme/map_theme.dart';
 import 'package:qvgestion_mobile/core/theme/theme_provider.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/radar_scene_model.dart';
@@ -101,15 +102,42 @@ void main() {
   });
 
   group('RadarSceneModel Tests', () {
-    test('buildFallbackMonumentsGeoJson contient les monuments et échangeurs du Burkina', () {
+    test('buildFallbackMonumentsGeoJson contient les monuments ancrés au sol (min_height=0)', () {
       final geojson = RadarSceneModel.buildFallbackMonumentsGeoJson();
       expect(geojson['type'], 'FeatureCollection');
       final features = geojson['features'] as List<dynamic>;
-      expect(features.length, greaterThanOrEqualTo(8));
+      expect(features.length, greaterThanOrEqualTo(12));
+      for (final f in features) {
+        final props = f['properties'] as Map;
+        expect(props['min_height'], 0.0);
+      }
       expect(
         features.any((f) => (f['properties'] as Map)['name'].toString().contains('Échangeur')),
         true,
       );
+    });
+  });
+
+  group('VoiceGuide Neural TTS Tests', () {
+    test('GuideStep.audioFor pointe vers /guidance/tts en Français et Mooré sans fichiers figés', () {
+      const step = GuideStep(
+        order: 1,
+        along: 400.0,
+        instruction: 'Tournez à droite',
+        maneuverType: 'turn_right',
+        distanceMeters: 400.0,
+        confidence: 3,
+        anchorName: 'Pharmacie Yennenga',
+      );
+
+      final frUrl = step.audioFor(dist: 200, language: 'fr');
+      final mosUrl = step.audioFor(dist: 200, language: 'mos');
+
+      expect(frUrl, contains('/guidance/tts'));
+      expect(frUrl, contains('lang=fr'));
+      expect(mosUrl, contains('/guidance/tts'));
+      expect(mosUrl, contains('lang=mos'));
+      expect(mosUrl, isNot(contains('assets/audio/mos/')));
     });
   });
 

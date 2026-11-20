@@ -36,6 +36,46 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- Ouverture directe de coordonnées GPS (WhatsApp, SMS, navigateur : geo:lat,lon) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="geo"/>
+            </intent-filter>
+
+            <!-- Schéma personnalisé FASO NAV -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="fasonav"/>
+            </intent-filter>
+
+            <!-- Liens web cartographiques (Google Maps, OpenStreetMap, Apple Maps) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"/>
+                <data android:scheme="http"/>
+                <data android:host="maps.google.com"/>
+                <data android:host="www.google.com" android:pathPrefix="/maps"/>
+                <data android:host="google.com" android:pathPrefix="/maps"/>
+                <data android:host="maps.app.goo.gl"/>
+                <data android:host="goo.gl" android:pathPrefix="/maps"/>
+                <data android:host="www.openstreetmap.org"/>
+                <data android:host="openstreetmap.org"/>
+                <data android:host="maps.apple.com"/>
+            </intent-filter>
+
+            <!-- Partage direct depuis WhatsApp, Chrome ou SMS ("Partager vers FASO NAV") -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

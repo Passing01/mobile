@@ -201,19 +201,23 @@ class RadarSceneModel {
   }
 
   /// Construit un GeoJSON local de repli pour afficher les monuments & échangeurs 3D
-  /// du Burkina Faso même sans connexion réseau.
+  /// du Burkina Faso avec coordonnées exactes OSM et ancrage strict au sol (min_height: 0.0).
   static Map<String, dynamic> buildFallbackMonumentsGeoJson() {
     const specs = <Map<String, dynamic>>[
-      {'id': 'ouaga_monument_martyrs', 'name': 'Monument des Martyrs', 'lat': 12.3160, 'lon': -1.5030, 'h': 58.0, 'base': 0.0, 'r': 28.0, 'color': '#D97706'},
-      {'id': 'ouaga_place_nation', 'name': 'Place de la Nation', 'lat': 12.3680, 'lon': -1.5270, 'h': 24.0, 'base': 0.0, 'r': 32.0, 'color': '#C2410C'},
-      {'id': 'ouaga_memorial_sankara', 'name': 'Mémorial Thomas Sankara', 'lat': 12.3672, 'lon': -1.5056, 'h': 36.0, 'base': 0.0, 'r': 24.0, 'color': '#B45309'},
-      {'id': 'ouaga_echangeur_nord', 'name': 'Échangeur du Nord', 'lat': 12.3924, 'lon': -1.5194, 'h': 16.0, 'base': 7.0, 'r': 55.0, 'color': '#64748B'},
-      {'id': 'ouaga_echangeur_est', 'name': 'Échangeur de l\'Est', 'lat': 12.3612, 'lon': -1.4846, 'h': 15.0, 'base': 6.5, 'r': 50.0, 'color': '#64748B'},
-      {'id': 'ouaga_echangeur_ouaga2000', 'name': 'Échangeur de Ouaga 2000', 'lat': 12.3238, 'lon': -1.5065, 'h': 15.5, 'base': 6.5, 'r': 48.0, 'color': '#64748B'},
-      {'id': 'ouaga_echangeur_ouest', 'name': 'Échangeur de l\'Ouest', 'lat': 12.3568, 'lon': -1.5646, 'h': 14.5, 'base': 6.0, 'r': 46.0, 'color': '#64748B'},
-      {'id': 'ouaga_grande_mosquee', 'name': 'Grande Mosquée de Ouagadougou', 'lat': 12.3712, 'lon': -1.5228, 'h': 32.0, 'base': 0.0, 'r': 26.0, 'color': '#059669'},
-      {'id': 'ouaga_rood_woko', 'name': 'Grand Marché Rood-Woko', 'lat': 12.3685, 'lon': -1.5222, 'h': 18.0, 'base': 0.0, 'r': 65.0, 'color': '#0D9488'},
-      {'id': 'bobo_vieille_mosquee', 'name': 'Vieille Mosquée de Dioulassoba', 'lat': 11.1783, 'lon': -4.2932, 'h': 22.0, 'base': 0.0, 'r': 22.0, 'color': '#B45309'},
+      {'id': 'ouaga_monument_martyrs', 'name': 'Monument aux Héros Nationaux', 'lat': 12.312187, 'lon': -1.502617, 'h': 55.0, 'base': 0.0, 'r': 11.0, 'color': '#D97706'},
+      {'id': 'ouaga_place_nation', 'name': 'Place de la Nation (Flambeau)', 'lat': 12.369752, 'lon': -1.529488, 'h': 22.0, 'base': 0.0, 'r': 12.0, 'color': '#C2410C'},
+      {'id': 'ouaga_memorial_sankara', 'name': 'Mémorial Thomas Sankara', 'lat': 12.376886, 'lon': -1.507897, 'h': 34.0, 'base': 0.0, 'r': 18.0, 'color': '#B45309'},
+      {'id': 'ouaga_echangeur_nord', 'name': 'Échangeur du Nord', 'lat': 12.384738, 'lon': -1.554870, 'h': 11.0, 'base': 0.0, 'r': 18.0, 'color': '#64748B'},
+      {'id': 'ouaga_echangeur_ouest', 'name': 'Échangeur de l\'Ouest', 'lat': 12.351148, 'lon': -1.556825, 'h': 11.0, 'base': 0.0, 'r': 18.0, 'color': '#64748B'},
+      {'id': 'ouaga_echangeur_sud', 'name': 'Échangeur du Sud (Ouaga 2000)', 'lat': 12.332088, 'lon': -1.502560, 'h': 11.0, 'base': 0.0, 'r': 18.0, 'color': '#64748B'},
+      {'id': 'ouaga_echangeur_yalgado', 'name': 'Échangeur de Yalgado', 'lat': 12.385550, 'lon': -1.502519, 'h': 11.0, 'base': 0.0, 'r': 18.0, 'color': '#64748B'},
+      {'id': 'ouaga_echangeur_est', 'name': 'Échangeur de l\'Est', 'lat': 12.361500, 'lon': -1.485500, 'h': 11.0, 'base': 0.0, 'r': 18.0, 'color': '#64748B'},
+      {'id': 'ouaga_grande_mosquee', 'name': 'Grande Mosquée de Ouagadougou', 'lat': 12.366216, 'lon': -1.521389, 'h': 30.0, 'base': 0.0, 'r': 18.0, 'color': '#059669'},
+      {'id': 'ouaga_cathedrale', 'name': 'Cathédrale de l\'Immaculée-Conception', 'lat': 12.361966, 'lon': -1.526855, 'h': 32.0, 'base': 0.0, 'r': 22.0, 'color': '#D97706'},
+      {'id': 'ouaga_palais_sports', 'name': 'Palais des Sports de Ouaga 2000', 'lat': 12.315590, 'lon': -1.498621, 'h': 26.0, 'base': 0.0, 'r': 34.0, 'color': '#2563EB'},
+      {'id': 'ouaga_stade_4_aout', 'name': 'Stade du 4-Août', 'lat': 12.367765, 'lon': -1.553511, 'h': 28.0, 'base': 0.0, 'r': 48.0, 'color': '#1D4ED8'},
+      {'id': 'bobo_vieille_mosquee', 'name': 'Grande Mosquée de Dioulassoba', 'lat': 11.177802, 'lon': -4.295981, 'h': 20.0, 'base': 0.0, 'r': 16.0, 'color': '#B45309'},
+      {'id': 'bobo_cinquantenaire', 'name': 'Rond-point du Cinquantenaire', 'lat': 11.155830, 'lon': -4.284981, 'h': 20.0, 'base': 0.0, 'r': 14.0, 'color': '#D97706'},
     ];
 
     final features = specs.map((s) {

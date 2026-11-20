@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/config/env_config.dart';
 import 'package:qvgestion_mobile/core/network/api_client.dart';
+import 'package:qvgestion_mobile/core/services/location_link_parser.dart';
 import 'package:qvgestion_mobile/core/storage/secure_storage_service.dart';
 import 'package:qvgestion_mobile/core/storage/token_storage.dart';
 
@@ -29,4 +30,11 @@ final apiClientProvider = Provider<ApiClient>((ref) {
 /// Fournisseur d'environnement
 final environmentProvider = Provider<AppEnvironment>((ref) {
   return EnvConfig.environment;
+});
+
+/// Service d'écoute des liens et partages de localisation entrants (WhatsApp, Web, geo:)
+final locationIntentServiceProvider = Provider<LocationIntentService>((ref) {
+  final service = LocationIntentService();
+  ref.onDispose(service.dispose);
+  return service;
 });

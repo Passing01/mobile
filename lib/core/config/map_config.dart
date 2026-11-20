@@ -8,6 +8,9 @@ class MapConfig {
   final String styleDark;
   final String styleSatellite;
   final String style3d;
+  final String? tilesBurkinaUrl;
+  final String? tilesOuagaHdUrl;
+  final String? ttsUrl;
   final String attribution;
 
   const MapConfig({
@@ -15,6 +18,9 @@ class MapConfig {
     required this.styleDark,
     required this.styleSatellite,
     this.style3d = 'assets/map/styles/faso-3d.json',
+    this.tilesBurkinaUrl,
+    this.tilesOuagaHdUrl,
+    this.ttsUrl,
     required this.attribution,
   });
 
@@ -66,6 +72,9 @@ class MapConfig {
       styleDark: _sanitizeUrl(json['style_dark'] as String?, defaultFasoDark),
       styleSatellite: _sanitizeUrl(json['style_satellite'] as String?, defaultFasoSatellite),
       style3d: _sanitizeUrl(json['style_3d'] as String?, defaultFaso3d),
+      tilesBurkinaUrl: json['tiles_burkina_url'] as String?,
+      tilesOuagaHdUrl: json['tiles_ouaga_hd_url'] as String?,
+      ttsUrl: json['tts_url'] as String?,
       attribution: json['attribution'] as String? ?? defaultAttribution,
     );
   }

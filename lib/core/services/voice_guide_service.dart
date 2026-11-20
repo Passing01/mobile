@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:qvgestion_mobile/core/config/env_config.dart';
 import 'package:qvgestion_mobile/core/services/navigation_engine.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/enriched_route_model.dart';
@@ -50,35 +51,45 @@ class GuideStep {
     return _spokenFr(dist);
   }
 
-  /// Résout l'éventuel fichier audio pour cette distance et cette langue
+  /// Résout l'URL de synthèse vocale neuronale dynamique (sans lire de fichiers figés)
+  String neuralTtsUrl({required double dist, String language = 'fr'}) {
+    final lang = _normalizeLang(language);
+    final text = spoken(dist: dist, language: lang);
+    final frFallback = spoken(dist: dist, language: 'fr');
+    return buildNeuralTtsUrl(text: text, language: lang, frenchFallback: frFallback);
+  }
+
+  /// Construit l'URL du flux TTS neuronal backend pour n'importe quelle phrase
+  static String buildNeuralTtsUrl({
+    required String text,
+    String language = 'fr',
+    String? frenchFallback,
+  }) {
+    final lang = _normalizeLang(language);
+    final base = EnvConfig.apiBaseUrl.replaceAll(RegExp(r'/$'), '');
+    final qp = <String, String>{
+      'lang': lang,
+      'text': text,
+      if (frenchFallback != null && frenchFallback.isNotEmpty)
+        'fallback_fr': frenchFallback,
+    };
+    return Uri.parse('$base/guidance/tts').replace(queryParameters: qp).toString();
+  }
+
+  static String _normalizeLang(String language) {
+    final l = language.toLowerCase().trim();
+    if (l == 'mos' || l == 'moore') return 'mos';
+    if (l == 'diu' || l == 'dioula') return 'diu';
+    return 'fr';
+  }
+
+  /// Résout la source audio pour cette distance et cette langue.
+  /// Privilégie la voix neuronale dynamique (/guidance/tts) plutôt que les fichiers WhatsApp statiques.
   String? audioFor({required double dist, String language = 'fr'}) {
     if (localAudioFile != null && localAudioFile!.isNotEmpty) {
       return localAudioFile;
     }
-    final lang = language.toLowerCase();
-    if (lang == 'mos' || lang == 'moore') {
-      return _nativeAudioPath('mos', maneuverType);
-    } else if (lang == 'diu' || lang == 'dioula') {
-      return _nativeAudioPath('diu', maneuverType);
-    }
-    return null;
-  }
-
-  static String? _nativeAudioPath(String lang, String type) {
-    final t = type.toLowerCase();
-    String file;
-    if (t.contains('left')) {
-      file = 'turn_left.wav';
-    } else if (t.contains('right')) {
-      file = 'turn_right.wav';
-    } else if (t == 'arrive') {
-      file = 'arrive.wav';
-    } else if (t == 'depart') {
-      file = 'depart.wav';
-    } else {
-      file = 'straight.wav';
-    }
-    return 'assets/audio/$lang/$file';
+    return neuralTtsUrl(dist: dist, language: language);
   }
 
   /// Icône Material symbolisant le virage ou l'action
@@ -341,27 +352,38 @@ class VoiceGuide {
     AppLogger.i('[VOIX] $text');
     banner.value = text; // Le texte s'affiche toujours
 
+    final isTest = WidgetsBinding.instance.runtimeType.toString().contains('Test');
+    final effectiveAudioSource = (audioSource != null && audioSource.isNotEmpty)
+        ? _resolveAudioSourceUrl(audioSource)
+        : (!isTest
+            ? GuideStep.buildNeuralTtsUrl(
+                text: text,
+                language: language,
+                frenchFallback: frenchFallbackText,
+              )
+            : null);
+
     bool audioPlayed = false;
-    // Si un fichier audio natif (Mooré/Dioula) est spécifié
-    if (audioSource != null && audioSource.isNotEmpty) {
+    // Lecture du flux audio neuronal dynamique (ou source locale explicite)
+    if (effectiveAudioSource != null && effectiveAudioSource.isNotEmpty && (!isTest || _customPlayer != null)) {
       try {
         await _tts.stop();
         final player = _player;
         if (player != null) {
           await player.stop();
-          if (audioSource.startsWith('assets/')) {
-            await player.play(AssetSource(audioSource.replaceFirst('assets/', '')));
+          if (effectiveAudioSource.startsWith('assets/')) {
+            await player.play(AssetSource(effectiveAudioSource.replaceFirst('assets/', '')));
             audioPlayed = true;
-          } else if (audioSource.startsWith('http')) {
-            await player.play(UrlSource(audioSource));
+          } else if (effectiveAudioSource.startsWith('http')) {
+            await player.play(UrlSource(effectiveAudioSource));
             audioPlayed = true;
           } else {
-            await player.play(DeviceFileSource(audioSource));
+            await player.play(DeviceFileSource(effectiveAudioSource));
             audioPlayed = true;
           }
         }
       } catch (e) {
-        AppLogger.w('[VOIX] Échec lecture audio ($e), repli vocal');
+        AppLogger.w('[VOIX] Échec lecture audio neuronal ($e), repli vocal');
         audioPlayed = false;
       }
     }
@@ -382,6 +404,18 @@ class VoiceGuide {
         AppLogger.w('[VOIX] Erreur synthèse vocale: $e');
       }
     }
+  }
+
+  String _resolveAudioSourceUrl(String rawSource) {
+    if (rawSource.startsWith('/api/v1/')) {
+      final base = EnvConfig.apiBaseUrl.replaceAll(RegExp(r'/$'), '');
+      return '$base${rawSource.replaceFirst('/api/v1', '')}';
+    }
+    if (rawSource.startsWith('/')) {
+      final origin = EnvConfig.apiBaseUrl.replaceAll(RegExp(r'/api/v1/?$'), '');
+      return '$origin$rawSource';
+    }
+    return rawSource;
   }
 
   /// Énonce la manœuvre avec prise en compte des repères familiers

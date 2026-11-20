@@ -44,9 +44,13 @@ import 'package:dio/dio.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
 import 'package:qvgestion_mobile/core/services/location_service.dart';
+import 'package:qvgestion_mobile/core/services/location_link_parser.dart';
 import 'package:qvgestion_mobile/core/services/route_service.dart';
 import 'package:qvgestion_mobile/core/services/navigation_engine.dart';
 import 'package:qvgestion_mobile/core/services/smooth_motion_interpolator.dart';
+import 'package:qvgestion_mobile/core/di/core_providers.dart';
+import 'package:qvgestion_mobile/features/navigation/presentation/providers/navigation_providers.dart';
+import 'package:qvgestion_mobile/features/navigation/presentation/widgets/faso_nav_bottom_bar.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/radar_scene_model.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/faso_radar_hud_view.dart';
 import 'package:qvgestion_mobile/features/map/presentation/widgets/map_style_selector_sheet.dart';
@@ -107,6 +111,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   final SmoothMotionInterpolator _motionInterpolator = SmoothMotionInterpolator();
   Timer? _smoothMotionTimer;
   DateTime _lastRadarSceneFetch = DateTime.fromMillisecondsSinceEpoch(0);
+  StreamSubscription<ParsedLocationLink>? _locationIntentSub;
 
   static bool get _isUnderWidgetTest {
     final binding = WidgetsBinding.instance.runtimeType.toString();
@@ -121,6 +126,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(authNotifierProvider.notifier).checkAuthStatus();
       _initLocationService();
+      _initLocationIntentListener();
       // Téléchargement automatique en arrière-plan des lieux réels OSM pour accès hors-ligne instantané
       ref.read(placesRepositoryProvider).downloadPlacesForOffline([
         'pharmacie',
@@ -138,11 +144,88 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   @override
   void dispose() {
     _gpsTrackingSub?.cancel();
+    _locationIntentSub?.cancel();
     _simulationTimer?.cancel();
     _smoothMotionTimer?.cancel();
     _placesDebounce?.cancel();
     _placesCancelToken?.cancel();
     super.dispose();
+  }
+
+  /// Écoute les coordonnées et liens cartographiques ouverts depuis WhatsApp, le Web ou SMS
+  Future<void> _initLocationIntentListener() async {
+    if (_isUnderWidgetTest) return;
+    final intentService = ref.read(locationIntentServiceProvider);
+    _locationIntentSub?.cancel();
+    _locationIntentSub = intentService.stream.listen(_handleIncomingLocationLink);
+    await intentService.start();
+  }
+
+  Future<void> _handleIncomingLocationLink(ParsedLocationLink link) async {
+    if (!mounted) return;
+    ref.read(currentTabProvider.notifier).selectTab(FasoNavTab.explorer);
+
+    if (ref.read(mapScreenStateProvider) != MapScreenState.explore) {
+      _cancelRouteAndNavigation();
+    }
+
+    PlaceModel? targetPlace;
+    if (link.hasCoordinates) {
+      final lat = link.latitude!;
+      final lon = link.longitude!;
+      final label = (link.label != null && link.label!.isNotEmpty)
+          ? link.label!
+          : 'Position partagée';
+      targetPlace = PlaceModel(
+        id: -DateTime.now().millisecondsSinceEpoch,
+        nom: label,
+        categorieId: 1,
+        latitude: lat,
+        longitude: lon,
+        adresse: '${lat.toStringAsFixed(6)}, ${lon.toStringAsFixed(6)}',
+      );
+    } else if (link.searchQuery != null && link.searchQuery!.isNotEmpty) {
+      try {
+        final loc = ref.read(currentLocationProvider);
+        final results = await ref.read(placesRepositoryProvider).searchPlaces(
+              query: link.searchQuery!,
+              currentLat: loc.lat,
+              currentLon: loc.lon,
+              limit: 1,
+            );
+        if (results.isNotEmpty) {
+          targetPlace = results.first;
+        }
+      } catch (e) {
+        AppLogger.w('Recherche lien partagé impossible: $e');
+      }
+    }
+
+    if (targetPlace == null || !mounted) return;
+
+    setState(() {
+      _following = false;
+      _activeTappedPlace = null;
+      _activePlaceSheetId = null;
+    });
+
+    ref.read(selectedPlaceProvider.notifier).select(targetPlace);
+    final mapService = ref.read(mapServiceProvider);
+    await mapService.setSelectedPlace(targetPlace);
+    await mapService.animateCamera(
+      lat: targetPlace.latitude,
+      lng: targetPlace.longitude,
+      zoom: 17.5,
+      tilt: ref.read(is3dMapModeProvider) ? 52.0 : 0.0,
+    );
+
+    if (mounted) {
+      AppSnackbar.showInfo(
+        context,
+        title: 'Localisation ouverte',
+        message: '📍 ${targetPlace.nom} — Prêt pour l\'itinéraire',
+      );
+    }
   }
 
   /// Initialise la demande de permission et démarre le flux GPS souverain (Étape 6)
