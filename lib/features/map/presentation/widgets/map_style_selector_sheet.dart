@@ -35,6 +35,7 @@ class MapStyleSelectorSheet extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final current = _currentMode(ref, context);
     final isRadarEnabled = ref.watch(isRadarViewEnabledProvider);
+    final navViewMode = ref.watch(navigationViewModeProvider);
 
     return Container(
       decoration: const BoxDecoration(
@@ -200,7 +201,7 @@ class MapStyleSelectorSheet extends ConsumerWidget {
                         ),
                         SizedBox(height: 2),
                         Text(
-                          'Perception 3D temps réel façon voiture autonome',
+                          'Optionnel : sinon navigation immergée entre les bâtiments 3D',
                           style: TextStyle(
                             color: Color(0xFF94A3B8),
                             fontSize: 11.5,
@@ -220,6 +221,31 @@ class MapStyleSelectorSheet extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('Entre bâtiments 3D'),
+                    selected: !isRadarEnabled && navViewMode == NavigationViewMode.buildings3d,
+                    onSelected: (_) {
+                      selectNavigationViewMode(ref, NavigationViewMode.buildings3d);
+                      selectMapStyleMode(ref, MapStyleMode.faso3d);
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ChoiceChip(
+                    label: const Text('Vue Carte standard'),
+                    selected: !isRadarEnabled && navViewMode == NavigationViewMode.mapTop,
+                    onSelected: (_) {
+                      selectNavigationViewMode(ref, NavigationViewMode.mapTop);
+                    },
+                  ),
+                ),
+              ],
             ),
           ],
         ),

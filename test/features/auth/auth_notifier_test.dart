@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:qvgestion_mobile/core/di/core_providers.dart';
 import 'package:qvgestion_mobile/core/network/api_exceptions.dart';
 import 'package:qvgestion_mobile/features/auth/data/models/user_model.dart';
 import 'package:qvgestion_mobile/features/auth/data/repositories/auth_repository.dart';
@@ -10,6 +11,7 @@ import 'package:qvgestion_mobile/features/auth/presentation/providers/auth_state
 class MockAuthRepository extends Mock implements IAuthRepository {}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late MockAuthRepository mockRepository;
 
   const testUser = UserModel(
@@ -125,6 +127,38 @@ void main() {
       final state = container.read(authNotifierProvider);
       expect(state.status, equals(AuthStatus.unauthenticated));
       expect(state.user, isNull);
+      verify(() => mockRepository.logout()).called(1);
+    });
+
+    test('expiration du jeton (sessionExpiredControllerProvider) déconnecte immédiatement l\'admin', () async {
+      const adminUser = UserModel(
+        id: 1,
+        nom: 'Admin Faso',
+        telephone: '+22670000001',
+        role: 'admin',
+      );
+      when(() => mockRepository.login(
+            identifier: '+22670000001',
+            password: 'AdminPass123!',
+          )).thenAnswer((_) async => adminUser);
+      when(() => mockRepository.logout()).thenAnswer((_) async {});
+
+      final container = createContainer();
+      final notifier = container.read(authNotifierProvider.notifier);
+
+      await notifier.login(
+        identifier: '+22670000001',
+        password: 'AdminPass123!',
+      );
+      expect(container.read(authNotifierProvider).user?.role, equals('admin'));
+
+      container.read(sessionExpiredControllerProvider).add(null);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      final afterState = container.read(authNotifierProvider);
+      expect(afterState.status, equals(AuthStatus.unauthenticated));
+      expect(afterState.user, isNull);
+      expect(afterState.isAuthenticated, isFalse);
       verify(() => mockRepository.logout()).called(1);
     });
   });

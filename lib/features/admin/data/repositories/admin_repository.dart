@@ -3,6 +3,7 @@ import 'package:qvgestion_mobile/core/network/api_endpoints.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 import 'package:qvgestion_mobile/features/admin/data/models/admin_dashboard_stats_model.dart';
 import 'package:qvgestion_mobile/features/admin/data/models/api_key_model.dart';
+import 'package:qvgestion_mobile/features/admin/data/models/building_3d_model.dart';
 import 'package:qvgestion_mobile/features/auth/data/models/user_model.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/road_feature_model.dart';
 import 'package:qvgestion_mobile/features/places/data/models/place_model.dart';
@@ -322,6 +323,73 @@ class AdminRepository {
       return UserModel.fromJson(response.data as Map<String, dynamic>);
     } catch (e, stack) {
       AppLogger.e('Erreur lors de la réinitialisation du mot de passe #$id', e, stack);
+      rethrow;
+    }
+  }
+
+  /// Liste tous les bâtiments/monuments 3D placés par les administrateurs
+  Future<List<Building3dModel>> getBuildings3d() async {
+    try {
+      final response = await apiClient.get<dynamic>(ApiEndpoints.adminBuildings3d);
+      final raw = response.data as List<dynamic>? ?? const [];
+      return raw
+          .map((e) => Building3dModel.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (e, stack) {
+      AppLogger.e('Erreur récupération bâtiments 3D admin', e, stack);
+      rethrow;
+    }
+  }
+
+  /// Crée un nouveau bâtiment ou monument 3D sur la carte Faso 3D
+  Future<Building3dModel> createBuilding3d({
+    required String name,
+    String? subtitle,
+    required String city,
+    required String kind,
+    required String shape,
+    required double latitude,
+    required double longitude,
+    required double height,
+    double widthM = 28.0,
+    double lengthM = 28.0,
+    double rotationDeg = 0.0,
+    String color = '#E6A15C',
+  }) async {
+    try {
+      final response = await apiClient.post<dynamic>(
+        ApiEndpoints.adminBuildings3d,
+        data: {
+          'name': name,
+          if (subtitle != null && subtitle.isNotEmpty) 'subtitle': subtitle,
+          'city': city,
+          'kind': kind,
+          'shape': shape,
+          'latitude': latitude,
+          'longitude': longitude,
+          'height': height,
+          'base_height': 0.0,
+          'width_m': widthM,
+          'length_m': lengthM,
+          'rotation_deg': rotationDeg,
+          'color': color,
+        },
+      );
+      return Building3dModel.fromJson(
+        Map<String, dynamic>.from(response.data as Map),
+      );
+    } catch (e, stack) {
+      AppLogger.e('Erreur création bâtiment 3D admin', e, stack);
+      rethrow;
+    }
+  }
+
+  /// Supprime un bâtiment/monument 3D personnalisé
+  Future<void> deleteBuilding3d(int id) async {
+    try {
+      await apiClient.delete<dynamic>(ApiEndpoints.adminBuilding3dDelete(id));
+    } catch (e, stack) {
+      AppLogger.e('Erreur suppression bâtiment 3D #$id', e, stack);
       rethrow;
     }
   }

@@ -111,6 +111,7 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
   final SmoothMotionInterpolator _motionInterpolator = SmoothMotionInterpolator();
   Timer? _smoothMotionTimer;
   DateTime _lastRadarSceneFetch = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastNavCameraUpdate = DateTime.fromMillisecondsSinceEpoch(0);
   StreamSubscription<ParsedLocationLink>? _locationIntentSub;
 
   static bool get _isUnderWidgetTest {
@@ -258,6 +259,9 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
         if (ref.read(mapScreenStateProvider) == MapScreenState.activeNavigation &&
             _navEngine != null) {
           final speedKmh = pos.speed.isFinite && pos.speed > 0 ? pos.speed * 3.6 : 0.0;
+          if (pos.speed > 0.8 && pos.heading.isFinite && pos.heading >= 0) {
+            _vehicleHeading = pos.heading;
+          }
           _processNavigationFix(
             LatLng(pos.latitude, pos.longitude),
             pos.accuracy,
@@ -265,12 +269,23 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             DateTime.now(),
           );
           if (_following) {
-            final c = _mapController ?? ref.read(mapServiceProvider).controller;
-            c?.animateCamera(
-              maplibre.CameraUpdate.newLatLng(
-                maplibre.LatLng(pos.latitude, pos.longitude),
-              ),
-            );
+            final navMode = ref.read(navigationViewModeProvider);
+            if (navMode == NavigationViewMode.buildings3d) {
+              ref.read(mapServiceProvider).animateCamera(
+                    lat: pos.latitude,
+                    lng: pos.longitude,
+                    zoom: 18.3,
+                    bearing: _vehicleHeading,
+                    tilt: 64.0,
+                  );
+            } else {
+              final c = _mapController ?? ref.read(mapServiceProvider).controller;
+              c?.animateCamera(
+                maplibre.CameraUpdate.newLatLng(
+                  maplibre.LatLng(pos.latitude, pos.longitude),
+                ),
+              );
+            }
           }
         }
       });
@@ -790,10 +805,17 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
     ref.read(mapScreenStateProvider.notifier).toActiveNavigation();
     if (lastGps != null) {
       setState(() => _following = true);
+      final isBuildings3d = ref.read(navigationViewModeProvider) == NavigationViewMode.buildings3d;
+      if (isBuildings3d) {
+        final monuments = await ref.read(monuments3dGeoJsonProvider.future);
+        await ref.read(mapServiceProvider).setMonuments3dGeoJson(monuments);
+      }
       ref.read(mapServiceProvider).animateCamera(
             lat: lastGps.latitude,
             lng: lastGps.longitude,
-            zoom: 17.0,
+            zoom: isBuildings3d ? 18.3 : 17.0,
+            bearing: isBuildings3d ? _vehicleHeading : null,
+            tilt: isBuildings3d ? 64.0 : (ref.read(is3dMapModeProvider) ? 52.0 : 0.0),
           );
     }
 
@@ -1002,6 +1024,20 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       ref
           .read(mapServiceProvider)
           .updateUserLocation(sample.latitude, sample.longitude);
+      if (_following &&
+          ref.read(navigationViewModeProvider) == NavigationViewMode.buildings3d) {
+        final now = DateTime.now();
+        if (now.difference(_lastNavCameraUpdate) >= const Duration(milliseconds: 220)) {
+          _lastNavCameraUpdate = now;
+          ref.read(mapServiceProvider).animateCamera(
+                lat: sample.latitude,
+                lng: sample.longitude,
+                zoom: 18.3,
+                bearing: sample.bearingDeg,
+                tilt: 64.0,
+              );
+        }
+      }
     });
   }
 
@@ -1592,31 +1628,79 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
       if (next) {
         final monuments = await ref.read(monuments3dGeoJsonProvider.future);
         await mapService.setMonuments3dGeoJson(monuments);
-        await mapService.setCameraTilt(52.0);
+        await mapService.setCameraTilt(
+          ref.read(mapScreenStateProvider) == MapScreenState.activeNavigation &&
+                  ref.read(navigationViewModeProvider) == NavigationViewMode.buildings3d
+              ? 64.0
+              : 52.0,
+        );
       } else {
         await mapService.setCameraTilt(0.0);
+      }
+    });
+
+    // Mise à jour en direct si l'admin ajoute ou supprime un bâtiment 3D
+    ref.listen<AsyncValue<Map<String, dynamic>>>(monuments3dGeoJsonProvider, (_, next) {
+      next.whenData((geoJson) {
+        if (ref.read(is3dMapModeProvider) ||
+            (ref.read(mapScreenStateProvider) == MapScreenState.activeNavigation &&
+                ref.read(navigationViewModeProvider) == NavigationViewMode.buildings3d)) {
+          mapService.setMonuments3dGeoJson(geoJson);
+        }
+      });
+    });
+
+    // Bascule fluide entre Navigation entre bâtiments 3D, Radar et Carte classique
+    ref.listen<NavigationViewMode>(navigationViewModeProvider, (prev, next) async {
+      if (ref.read(mapScreenStateProvider) != MapScreenState.activeNavigation) return;
+      final pos = _vehiclePosition ??
+          LatLng(ref.read(currentLocationProvider).lat, ref.read(currentLocationProvider).lon);
+      if (next == NavigationViewMode.buildings3d) {
+        final monuments = await ref.read(monuments3dGeoJsonProvider.future);
+        await mapService.setMonuments3dGeoJson(monuments);
+        await mapService.animateCamera(
+          lat: pos.latitude,
+          lng: pos.longitude,
+          zoom: 18.3,
+          bearing: _vehicleHeading,
+          tilt: 64.0,
+        );
+      } else if (next == NavigationViewMode.mapTop) {
+        await mapService.animateCamera(
+          lat: pos.latitude,
+          lng: pos.longitude,
+          zoom: 16.5,
+          bearing: 0.0,
+          tilt: 0.0,
+        );
       }
     });
 
     final isSatellite = ref.watch(isSatelliteModeProvider);
     final is3dMap = ref.watch(is3dMapModeProvider);
     final isRadarView = ref.watch(isRadarViewEnabledProvider);
+    final navViewMode = ref.watch(navigationViewModeProvider);
     final themeMode = ref.watch(themeModeProvider);
     final platformBrightness = MediaQuery.platformBrightnessOf(context);
     final isDark =
         themeMode == ThemeMode.dark ||
         (themeMode == ThemeMode.system &&
             platformBrightness == Brightness.dark);
+    final use3dStyleNow = !isSatellite &&
+        (is3dMap ||
+            (screenState == MapScreenState.activeNavigation &&
+                navViewMode == NavigationViewMode.buildings3d &&
+                !isDark));
     final mapTheme = isSatellite
         ? MapTheme.satellite
-        : (is3dMap
+        : (use3dStyleNow
               ? MapTheme.faso3d
               : (isDark ? MapTheme.dark : MapTheme.light));
 
     final styleUrl = isSatellite
         ? (mapConfigAsync.value?.styleSatellite ??
               MapConfig.defaultFasoSatellite)
-        : (is3dMap
+        : (use3dStyleNow
               ? (mapConfigAsync.value?.style3d ?? MapConfig.defaultFaso3d)
               : (isDark
                     ? (mapConfigAsync.value?.styleDark ??
@@ -1643,7 +1727,9 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
             styleUrl: styleUrl,
             attributionText: attributionText,
             myLocationEnabled: _permissionOk,
-            myLocationTrackingMode: _following
+            myLocationTrackingMode: (_following &&
+                    !(screenState == MapScreenState.activeNavigation &&
+                        navViewMode == NavigationViewMode.buildings3d))
                 ? maplibre.MyLocationTrackingMode.tracking
                 : maplibre.MyLocationTrackingMode.none,
             onCameraTrackingDismissed: () {
@@ -1681,11 +1767,17 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               if (route != null) {
                 await mapService.setRoute(route);
               }
-              if (is3dMap) {
-                await mapService.setMonuments3dGeoJson(
-                  RadarSceneModel.buildFallbackMonumentsGeoJson(),
+              if (use3dStyleNow) {
+                final monuments = await ref.read(monuments3dGeoJsonProvider.future).catchError(
+                      (_) => RadarSceneModel.buildFallbackMonumentsGeoJson(),
+                    );
+                await mapService.setMonuments3dGeoJson(monuments);
+                await mapService.setCameraTilt(
+                  screenState == MapScreenState.activeNavigation &&
+                          navViewMode == NavigationViewMode.buildings3d
+                      ? 64.0
+                      : 52.0,
                 );
-                await mapService.setCameraTilt(52.0);
               }
               await _refreshPlaces();
             },
@@ -2788,6 +2880,22 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               tooltip: _isSimulationPaused ? 'Reprendre' : 'Pause',
             ),
           IconButton(
+            key: const Key('btn_toggle_3d_street_view'),
+            onPressed: () {
+              ref.read(is3dMapModeProvider.notifier).set3d(true);
+              selectNavigationViewMode(ref, NavigationViewMode.buildings3d);
+            },
+            icon: Icon(
+              Icons.location_city_rounded,
+              color: !ref.watch(isRadarViewEnabledProvider) &&
+                      ref.watch(navigationViewModeProvider) == NavigationViewMode.buildings3d
+                  ? const Color(0xFFFBBF24)
+                  : Colors.white70,
+              size: 22,
+            ),
+            tooltip: 'Naviguer entre les bâtiments 3D',
+          ),
+          IconButton(
             key: const Key('btn_toggle_radar_view'),
             onPressed: () {
               ref.read(isRadarViewEnabledProvider.notifier).toggle();
@@ -2796,8 +2904,8 @@ class _HomeMapScreenState extends ConsumerState<HomeMapScreen> {
               Icons.radar_rounded,
               color: ref.watch(isRadarViewEnabledProvider)
                   ? const Color(0xFF38BDF8)
-                  : Colors.white,
-              size: 24,
+                  : Colors.white70,
+              size: 22,
             ),
             tooltip: 'Vue Radar Live',
           ),

@@ -12,6 +12,7 @@ import 'package:qvgestion_mobile/features/admin/presentation/widgets/admin_user_
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/broadcast_geo_alert_modal.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/create_api_key_dialog.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/declare_maintenance_dialog.dart';
+import 'package:qvgestion_mobile/features/admin/presentation/widgets/add_building_3d_dialog.dart';
 import 'package:qvgestion_mobile/features/admin/presentation/widgets/trace_road_dialog.dart';
 import 'package:qvgestion_mobile/features/auth/data/models/user_model.dart';
 import 'package:qvgestion_mobile/features/places/presentation/providers/places_providers.dart';
@@ -754,6 +755,20 @@ class _AdminScreenState extends ConsumerState<AdminScreen>
           bgColor: const Color(0xFFE0E7FF),
           onTap: () => TraceRoadDialog.show(context),
         ),
+        const SizedBox(height: 16),
+
+        // Action 4: Déposer un bâtiment, monument ou échangeur sur Faso 3D
+        _buildEditorActionCard(
+          title: 'Déposer un Bâtiment / Monument 3D',
+          subtitle: 'Ajout direct d\'immeubles, mosquées, marchés ou monuments sur Faso 3D',
+          buttonText: 'Déposer en 3D',
+          icon: Icons.apartment_rounded,
+          iconColor: const Color(0xFFD97706),
+          bgColor: const Color(0xFFFEF3C7),
+          onTap: () => AddBuilding3dDialog.show(context),
+        ),
+        const SizedBox(height: 12),
+        const AdminBuildings3dSection(),
         const SizedBox(height: 20),
 
         // Aperçu des ancres existantes

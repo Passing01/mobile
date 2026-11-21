@@ -79,6 +79,8 @@ class ApiEndpoints {
   static const String adminTrafficSignal = '/admin/road-features/traffic-signal';
   static const String adminRoadMaintenance = '/admin/road-maintenance';
   static const String adminRoadTrace = '/admin/roads/trace';
+  static const String adminBuildings3d = '/admin/buildings-3d';
+  static String adminBuilding3dDelete(int id) => '/admin/buildings-3d/$id';
   static const String matrix = '/matrix';
 
   // --- Gestion des Administrateurs & Utilisateurs ---

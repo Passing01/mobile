@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/config/env_config.dart';
 import 'package:qvgestion_mobile/core/network/api_client.dart';
@@ -16,13 +17,28 @@ final tokenStorageProvider = Provider<TokenStorage>((ref) {
   return TokenStorage(storage: storage);
 });
 
+/// Contrôleur global notifiant l'application lorsqu'une session / JWT a expiré (HTTP 401 irrécupérable)
+final sessionExpiredControllerProvider = Provider<StreamController<void>>((ref) {
+  final controller = StreamController<void>.broadcast();
+  ref.onDispose(controller.close);
+  return controller;
+});
+
+/// Flux global d'expiration de session écouté par AuthNotifier
+final sessionExpiredStreamProvider = StreamProvider<void>((ref) {
+  return ref.watch(sessionExpiredControllerProvider).stream;
+});
+
 /// Fournisseur du client HTTP API
 final apiClientProvider = Provider<ApiClient>((ref) {
   final tokenStorage = ref.watch(tokenStorageProvider);
+  final sessionExpiredController = ref.watch(sessionExpiredControllerProvider);
   return ApiClient(
     tokenStorage: tokenStorage,
     onTokenExpired: () {
-      // Déclencheur global de déconnexion / redirection vers l'écran de login
+      if (!sessionExpiredController.isClosed) {
+        sessionExpiredController.add(null);
+      }
     },
   );
 });

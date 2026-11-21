@@ -25,7 +25,32 @@ class AuthNotifier extends Notifier<AuthState> {
 
   @override
   AuthState build() {
+    final sub = ref.read(sessionExpiredControllerProvider).stream.listen((_) {
+      handleSessionExpired();
+    });
+    ref.onDispose(sub.cancel);
     return const AuthState(status: AuthStatus.unauthenticated);
+  }
+
+  /// Déconnexion automatique immédiate lorsque le jeton d'accès + refresh ont expiré (401)
+  Future<void> handleSessionExpired() async {
+    if (state.status == AuthStatus.unauthenticated && state.user == null) {
+      return;
+    }
+    AppLogger.w('Session utilisateur expirée — déconnexion automatique.');
+    try {
+      await _authRepository.logout();
+    } catch (_) {}
+    state = const AuthState(
+      status: AuthStatus.unauthenticated,
+      errorMessage: 'Votre session a expiré. Veuillez vous reconnecter.',
+    );
+    try {
+      AppErrorReporter.reportWarning(
+        'Session expirée — vous avez été déconnecté. Veuillez vous reconnecter.',
+        tag: 'Session',
+      );
+    } catch (_) {}
   }
 
   /// Vérifie si l'utilisateur possède déjà une session active au démarrage

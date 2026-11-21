@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -111,16 +112,18 @@ class _VoiceSearchSheetState extends ConsumerState<VoiceSearchSheet>
 
   Future<void> _startListening() async {
     try {
-      final micStatus = await Permission.microphone.request();
-      if (!micStatus.isGranted) {
-        if (mounted) {
-          setState(() {
-            _isListening = false;
-            _statusMessage =
-                'Microphone non autorisé. Vous pouvez choisir un lieu ci-dessous :';
-          });
+      if (!kIsWeb) {
+        final micStatus = await Permission.microphone.request();
+        if (!micStatus.isGranted) {
+          if (mounted) {
+            setState(() {
+              _isListening = false;
+              _statusMessage =
+                  'Microphone non autorisé. Vous pouvez choisir un lieu ci-dessous :';
+            });
+          }
+          return;
         }
-        return;
       }
 
       final available = await _speech.initialize(

@@ -1,6 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:qvgestion_mobile/core/utils/app_logger.dart';
 
@@ -90,16 +91,21 @@ class LocationLinkParser {
   }
 
   static Future<String?> _resolveShortUrl(String shortUrl) async {
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+    if (kIsWeb) return null;
+    final dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 6),
+        receiveTimeout: const Duration(seconds: 6),
+        followRedirects: false,
+        validateStatus: (_) => true,
+        headers: {'User-Agent': 'FasoNav/1.0'},
+      ),
+    );
     try {
       var currentUri = Uri.parse(shortUrl);
       for (var i = 0; i < 5; i++) {
-        final req = await client.getUrl(currentUri);
-        req.followRedirects = false;
-        req.headers.set(HttpHeaders.userAgentHeader, 'FasoNav/1.0');
-        final res = await req.close().timeout(const Duration(seconds: 6));
-        await res.drain<void>();
-        final loc = res.headers.value(HttpHeaders.locationHeader);
+        final res = await dio.getUri<dynamic>(currentUri);
+        final loc = res.headers.value('location');
         if (loc == null || loc.isEmpty) {
           return currentUri.toString();
         }
@@ -113,7 +119,7 @@ class LocationLinkParser {
       AppLogger.d('Résolution lien court impossible ($e)');
       return null;
     } finally {
-      client.close(force: true);
+      dio.close();
     }
   }
 
@@ -358,6 +364,14 @@ class LocationIntentService {
   Future<void> start() async {
     if (_initialized) return;
     _initialized = true;
+
+    if (kIsWeb) {
+      final base = Uri.base;
+      if (base.queryParameters.isNotEmpty || base.fragment.isNotEmpty) {
+        await _handleRawPayload(base.toString());
+      }
+      return;
+    }
 
     _eventSub = _eventChannel.receiveBroadcastStream().listen(
       (event) {

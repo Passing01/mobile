@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -183,7 +185,37 @@ class GuideStep {
 
     return dist >= 100.0
         ? 'Mɛtr $dInt poore, $action'
-        : 'Kẽng tao mɛtr $dInt, rabo $action';
+        : 'Taore mɛtr $dInt, $action';
+  }
+
+  /// Asset audio humain natif en Mooré enregistré localement (fallback garanti si TTS neuronal indisponible)
+  static String? nativeAssetFor({
+    required String language,
+    required String maneuverType,
+    String textHint = '',
+  }) {
+    final lang = language.toLowerCase();
+    if (lang != 'mos' && lang != 'moore' && lang != 'diu' && lang != 'dioula') {
+      return null;
+    }
+    if (lang == 'diu' || lang == 'dioula') {
+      return null;
+    }
+    final t = maneuverType.toLowerCase();
+    final h = textHint.toLowerCase();
+    if (t == 'arrive' || h.contains('taame') || h.contains('arriv')) {
+      return 'assets/audio/mos/arrive.ogg';
+    }
+    if (t == 'depart' || h.contains('départ') || h.contains('rɩk sorã') && !h.contains('rond-point')) {
+      return 'assets/audio/mos/depart.ogg';
+    }
+    if (t.contains('left') || h.contains('goabga') || h.contains('gauche')) {
+      return 'assets/audio/mos/turn_left.ogg';
+    }
+    if (t.contains('right') || h.contains('rɩtgo') || h.contains('droite')) {
+      return 'assets/audio/mos/turn_right.ogg';
+    }
+    return 'assets/audio/mos/straight.ogg';
   }
 
   String _spokenDioula(double dist) {
@@ -348,6 +380,7 @@ class VoiceGuide {
     String? audioSource,
     String language = 'fr',
     String? frenchFallbackText,
+    String maneuverType = '',
   }) async {
     AppLogger.i('[VOIX] $text');
     banner.value = text; // Le texte s'affiche toujours
@@ -375,8 +408,11 @@ class VoiceGuide {
             await player.play(AssetSource(effectiveAudioSource.replaceFirst('assets/', '')));
             audioPlayed = true;
           } else if (effectiveAudioSource.startsWith('http')) {
-            await player.play(UrlSource(effectiveAudioSource));
-            audioPlayed = true;
+            final bytes = await _fetchAudioBytesIfReady(effectiveAudioSource);
+            if (bytes != null && bytes.isNotEmpty) {
+              await player.play(BytesSource(bytes));
+              audioPlayed = true;
+            }
           } else {
             await player.play(DeviceFileSource(effectiveAudioSource));
             audioPlayed = true;
@@ -388,10 +424,30 @@ class VoiceGuide {
       }
     }
 
+    // Repli vocal humain Mooré natif enregistré si le serveur TTS Mooré renvoie 503 / est hors ligne
+    if (!audioPlayed && (!isTest || _customPlayer != null)) {
+      final nativeAsset = GuideStep.nativeAssetFor(
+        language: language,
+        maneuverType: maneuverType,
+        textHint: '$text ${frenchFallbackText ?? ''}',
+      );
+      if (nativeAsset != null) {
+        try {
+          final player = _player;
+          if (player != null) {
+            await _tts.stop();
+            await player.stop();
+            await player.play(AssetSource(nativeAsset.replaceFirst('assets/', '')));
+            audioPlayed = true;
+          }
+        } catch (e) {
+          AppLogger.w('[VOIX] Échec lecture audio natif Mooré ($e)');
+        }
+      }
+    }
+
     // Synthèse vocale TTS :
-    // RÈGLE ÉTAPE 10 : Si un audio mooré ou dioula manque, le repli sur la voix de synthèse française
-    // lirait du texte mooré/dioula avec une prononciation française incompréhensible.
-    // En cas de repli, énoncer la consigne équivalente EN FRANÇAIS tout en gardant l'affichage dans la langue sélectionnée !
+    // RÈGLE ÉTAPE 10 : En Mooré/Dioula, ne jamais prononcer la phonétique Mooré avec une voix TTS française.
     if (!audioPlayed && _ok) {
       try {
         await _player?.stop();
@@ -403,6 +459,30 @@ class VoiceGuide {
       } catch (e) {
         AppLogger.w('[VOIX] Erreur synthèse vocale: $e');
       }
+    }
+  }
+
+  Future<Uint8List?> _fetchAudioBytesIfReady(String url) async {
+    final dio = Dio(
+      BaseOptions(
+        responseType: ResponseType.bytes,
+        connectTimeout: const Duration(seconds: 4),
+        receiveTimeout: const Duration(seconds: 5),
+        validateStatus: (status) => status == 200,
+      ),
+    );
+    try {
+      final res = await dio.get<List<int>>(url);
+      final raw = res.data;
+      if (res.statusCode != 200 || raw == null || raw.length <= 64) {
+        return null;
+      }
+      return Uint8List.fromList(raw);
+    } catch (e) {
+      AppLogger.w('[VOIX] TTS distant indisponible ($e)');
+      return null;
+    } finally {
+      dio.close();
     }
   }
 
@@ -422,35 +502,40 @@ class VoiceGuide {
   Future<void> sayStep(dynamic step, {String language = 'fr'}) async {
     String text = '';
     String frenchFallbackText = '';
-    String? audioUrl;
-    String? landmarkName;
+    String audioUrl = '';
+    String landmarkName = '';
+    String maneuverType = '';
 
     if (step is GuideStep) {
       text = step.spoken(dist: 50.0, language: language);
       frenchFallbackText = step.spoken(dist: 50.0, language: 'fr');
-      audioUrl = step.audioFor(dist: 50.0, language: language) ?? step.localAudioFile;
-      landmarkName = step.anchorName;
+      audioUrl = step.audioFor(dist: 50.0, language: language) ?? step.localAudioFile ?? '';
+      landmarkName = step.anchorName ?? '';
+      maneuverType = step.maneuverType;
     } else if (step is Map<String, dynamic>) {
       text = (step['localized_instruction'] as String?) ??
           (step['instruction'] as String?) ??
           (step['maneuver'] is Map ? step['maneuver']['instruction'] as String? : null) ??
           '';
       frenchFallbackText = (step['instruction'] as String?) ?? text;
-      audioUrl = step['audio_url'] as String?;
-      landmarkName = step['landmark_name'] as String?;
+      audioUrl = (step['audio_url'] as String?) ?? '';
+      landmarkName = (step['landmark_name'] as String?) ?? '';
+      maneuverType = (step['maneuver_type'] as String?) ??
+          (step['maneuver'] is Map ? step['maneuver']['type'] as String? : null) ??
+          '';
     } else {
       try {
         text = (step.localizedInstruction ?? step.originalInstruction ?? '').toString();
         frenchFallbackText = (step.originalInstruction ?? step.instruction ?? text).toString();
-        audioUrl = step.audioUrl as String?;
-        landmarkName = step.landmarkName as String?;
+        audioUrl = (step.audioUrl as String?) ?? '';
+        landmarkName = (step.landmarkName as String?) ?? '';
       } catch (_) {
         text = step.toString();
         frenchFallbackText = text;
       }
     }
 
-    if (landmarkName != null && landmarkName.isNotEmpty && !text.contains(landmarkName)) {
+    if (landmarkName.isNotEmpty && !text.contains(landmarkName)) {
       final lang = language.toLowerCase();
       if (lang == 'mos' || lang == 'moore') {
         text = '$landmarkName poore, $text';
@@ -464,9 +549,10 @@ class VoiceGuide {
 
     await say(
       text,
-      audioSource: audioUrl,
+      audioSource: audioUrl.isNotEmpty ? audioUrl : null,
       language: language,
       frenchFallbackText: frenchFallbackText,
+      maneuverType: maneuverType,
     );
   }
 
@@ -517,6 +603,7 @@ class Announcer {
             audioSource: steps[i].audioFor(dist: t, language: language),
             language: language,
             frenchFallbackText: steps[i].spoken(dist: t, language: 'fr'),
+            maneuverType: steps[i].maneuverType,
           );
         }
       }

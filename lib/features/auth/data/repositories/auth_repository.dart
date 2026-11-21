@@ -115,12 +115,24 @@ class AuthRepository implements IAuthRepository {
 
   @override
   Future<UserModel?> getCurrentUser() async {
+    if (!await tokenStorage.hasAccessToken()) {
+      await logout();
+      return null;
+    }
     try {
       final response = await apiClient.get(ApiEndpoints.userMe);
       final user = UserModel.fromJson(response.data as Map<String, dynamic>);
       await _cacheUser(user);
       return user;
     } catch (e) {
+      if (!await tokenStorage.hasAccessToken() ||
+          e.toString().contains('401') ||
+          e.toString().toLowerCase().contains('unauthorized') ||
+          e.toString().toLowerCase().contains('expiré')) {
+        AppLogger.w('Session expirée lors de la vérification du profil, déconnexion forcée: $e');
+        await logout();
+        return null;
+      }
       AppLogger.w('Impossible de récupérer le profil distant, tentative depuis le cache: $e');
       return await _getCachedUser();
     }

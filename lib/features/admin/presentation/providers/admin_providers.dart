@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qvgestion_mobile/core/di/core_providers.dart';
 import 'package:qvgestion_mobile/features/admin/data/models/admin_dashboard_stats_model.dart';
 import 'package:qvgestion_mobile/features/admin/data/models/api_key_model.dart';
+import 'package:qvgestion_mobile/features/admin/data/models/building_3d_model.dart';
 import 'package:qvgestion_mobile/features/admin/data/repositories/admin_repository.dart';
 import 'package:qvgestion_mobile/features/auth/data/models/user_model.dart';
 import 'package:qvgestion_mobile/features/guidance/data/models/road_feature_model.dart';
@@ -152,4 +153,10 @@ final adminUsersProvider =
     AsyncNotifierProvider<AdminUsersNotifier, List<UserModel>>(
   AdminUsersNotifier.new,
 );
+
+/// Liste des bâtiments / monuments 3D placés par l'administration
+final adminBuildings3dProvider = FutureProvider<List<Building3dModel>>((ref) async {
+  final repo = ref.watch(adminRepositoryProvider);
+  return repo.getBuildings3d();
+});
 
